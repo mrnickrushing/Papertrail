@@ -84,13 +84,13 @@ export default function OnboardingScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      {/* Skip */}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Skip — top right */}
       <Pressable style={styles.skipBtn} onPress={() => finish(true)} hitSlop={12}>
         <Text style={styles.skipText}>Skip</Text>
       </Pressable>
 
-      {/* Slides */}
+      {/* Slides fill remaining space */}
       <FlatList
         ref={listRef}
         data={SLIDES}
@@ -100,27 +100,31 @@ export default function OnboardingScreen() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEnabled={false}
+        style={styles.slideList}
         getItemLayout={(_, index) => ({ length: SCREEN_W, offset: SCREEN_W * index, index })}
       />
 
-      {/* Dots */}
-      <View style={styles.dots}>
-        {SLIDES.map((_, i) => (
-          <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />
-        ))}
-      </View>
+      {/* Bottom bar — pinned to safe area bottom */}
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, S[6]) }]}>
+        {/* Dots */}
+        <View style={styles.dots}>
+          {SLIDES.map((_, i) => (
+            <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />
+          ))}
+        </View>
 
-      {/* CTA */}
-      <Pressable
-        style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
-        onPress={next}
-        accessibilityRole="button"
-        accessibilityLabel={activeIndex < SLIDES.length - 1 ? 'Next' : 'Get Started'}
-      >
-        <Text style={styles.ctaText}>
-          {activeIndex < SLIDES.length - 1 ? 'Next →' : 'Get Started'}
-        </Text>
-      </Pressable>
+        {/* CTA */}
+        <Pressable
+          style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+          onPress={next}
+          accessibilityRole="button"
+          accessibilityLabel={activeIndex < SLIDES.length - 1 ? 'Next' : 'Get Started'}
+        >
+          <Text style={styles.ctaText}>
+            {activeIndex < SLIDES.length - 1 ? 'Next →' : 'Get Started'}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -137,6 +141,7 @@ const styles = StyleSheet.create({
     paddingVertical: S[4],
   },
   skipText: { fontSize: T.base, color: C.ash },
+  slideList: { flex: 1, width: SCREEN_W },
   slide: {
     width: SCREEN_W,
     flex: 1,
@@ -160,10 +165,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
+  bottomBar: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: S[8],
+    gap: S[4],
+    paddingTop: S[4],
+  },
   dots: {
     flexDirection: 'row',
     gap: S[2],
-    marginBottom: S[6],
   },
   dot: {
     width: 8,
@@ -178,13 +189,11 @@ const styles = StyleSheet.create({
   cta: {
     backgroundColor: C.amber,
     borderRadius: R.lg,
-    paddingHorizontal: S[10],
     paddingVertical: S[4],
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: S[6],
-    width: SCREEN_W - S[8] * 2,
+    width: '100%',
   },
   ctaPressed: { opacity: 0.8 },
   ctaText: { fontSize: T.lg, fontWeight: '700', color: C.ink1 },

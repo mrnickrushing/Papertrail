@@ -25,6 +25,7 @@ import { FolderPickerModal } from '@/components/FolderPickerModal';
 import { SkeletonList } from '@/components/SkeletonLoader';
 import { FAB } from '@/components/FAB';
 import { EmptyState } from '@/components/EmptyState';
+import { SwipeableCard } from '@/components/SwipeableCard';
 import { Colors, Typography, Spacing } from '@/theme';
 import { C, T, S, R } from '@/theme/tokens';
 
@@ -57,6 +58,8 @@ export default function VaultScreen() {
     bulkDelete,
     bulkMove,
     bulkSetTags,
+    deleteDocument,
+    toggleFavorite,
   } = useDocumentStore();
 
   const sortBy = useAppStore(s => s.sortBy);
@@ -278,26 +281,41 @@ export default function VaultScreen() {
             selectionMode && styles.listBulk,
           ]}
           renderItem={({ item }) => (
-            <DocumentCard
-              document={item}
-              compact={viewMode === 'list'}
-              selectionMode={selectionMode}
-              isSelected={selectedIds.has(item.id)}
-              onPress={() => {
-                if (selectionMode) {
-                  toggleSelection(item.id);
-                } else {
-                  router.push(`/viewer/${item.id}`);
-                }
+            <SwipeableCard
+              isFavorite={item.isFavorite}
+              disabled={selectionMode}
+              onFavorite={() => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                toggleFavorite(item.id);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
-              onLongPress={() => {
-                if (selectionMode) {
-                  toggleSelection(item.id);
-                } else {
-                  enterSelectionMode(item.id);
-                }
+              onDelete={() => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                deleteDocument(item.id);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               }}
-            />
+            >
+              <DocumentCard
+                document={item}
+                compact={viewMode === 'list'}
+                selectionMode={selectionMode}
+                isSelected={selectedIds.has(item.id)}
+                onPress={() => {
+                  if (selectionMode) {
+                    toggleSelection(item.id);
+                  } else {
+                    router.push(`/viewer/${item.id}`);
+                  }
+                }}
+                onLongPress={() => {
+                  if (selectionMode) {
+                    toggleSelection(item.id);
+                  } else {
+                    enterSelectionMode(item.id);
+                  }
+                }}
+              />
+            </SwipeableCard>
           )}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           ListEmptyComponent={

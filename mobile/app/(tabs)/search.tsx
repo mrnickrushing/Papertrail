@@ -9,7 +9,7 @@
  *   - Metadata chips: inferred date, vendor, amounts from OCR
  */
 
-import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import {
   View,
   Text,
@@ -101,11 +101,23 @@ export default function SearchScreen() {
     setRecentSearches([]);
   }, []);
 
-  const sortedResults = sortByDate
-    ? [...results].sort((a, b) => b.document.createdAt.localeCompare(a.document.createdAt))
-    : results;
-
   const hasQuery = query.trim().length > 0;
+
+  // Group results: title/tag/category matches first, OCR text matches second
+  const { titleMatches, textMatches } = useMemo(() => {
+    const base = sortByDate
+      ? [...results].sort((a, b) => b.document.createdAt.localeCompare(a.document.createdAt))
+      : results;
+    return {
+      titleMatches: base.filter(r =>
+        r.matchedFields.some(f => f === 'title' || f === 'tags' || f === 'category')
+      ),
+      textMatches: base.filter(r =>
+        !r.matchedFields.some(f => f === 'title' || f === 'tags' || f === 'category') &&
+        r.matchedFields.includes('ocrText')
+      ),
+    };
+  }, [results, sortByDate]);
   const suggestions = hasQuery
     ? recentSearches.filter(r => r.toLowerCase().includes(query.toLowerCase()) && r !== query)
     : [];
@@ -194,9 +206,19 @@ export default function SearchScreen() {
         <NoResults query={query} />
       ) : (
         <FlatList
-          data={sortedResults}
-          keyExtractor={item => item.document.id}
-          renderItem={renderItem}
+          data={[
+            ...(titleMatches.length > 0 ? [{ type: 'header', label: `Title · Tag · Category (${titleMatches.length})`, key: 'h1' }] : []),
+            ...titleMatches.map(r => ({ type: 'result', result: r, key: r.document.id })),
+            ...(textMatches.length > 0 ? [{ type: 'header', label: `Extracted Text (${textMatches.length})`, key: 'h2' }] : []),
+            ...textMatches.map(r => ({ type: 'result', result: r, key: r.document.id })),
+          ] as any[]}
+          keyExtractor={item => item.key}
+          renderItem={({ item }) => {
+            if (item.type === 'header') {
+              return <Text style={styles.groupHeader}>{item.label}</Text>;
+            }
+            return renderItem({ item: item.result });
+          }}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
@@ -411,6 +433,16 @@ const styles = StyleSheet.create({
   },
   sortToggle: { fontSize: T.sm, color: C.ash },
   sortToggleActive: { color: C.amber, fontWeight: '600' },
+  groupHeader: {
+    fontSize: T.xs,
+    color: C.ash,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginTop: S[3],
+    marginBottom: S[2],
+    paddingHorizontal: S[1],
+  },
   resultItem: {
     marginBottom: S[3],
     borderRadius: R.lg,

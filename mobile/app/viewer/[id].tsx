@@ -25,6 +25,8 @@ import {
   Dimensions,
   Modal,
   Platform,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,6 +97,30 @@ export default function DocumentViewerScreen() {
 
   const titleInputRef = useRef<TextInput>(null);
 
+  // Swipe-to-dismiss: downward pan dismisses viewer
+  const swipeY = useRef(new Animated.Value(0)).current;
+  const dismissPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        !isEditingTitle && g.dy > 12 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) swipeY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 100 || g.vy > 0.8) {
+          Animated.timing(swipeY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(
+            () => router.canGoBack() ? router.back() : router.replace('/(tabs)/')
+          );
+        } else {
+          Animated.spring(swipeY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeY, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
   const handleSaveTitle = useCallback(() => {
     if (!document) return;
     const trimmed = editTitle.trim();
@@ -158,7 +184,10 @@ export default function DocumentViewerScreen() {
   const isPDF = document.mimeType.includes('pdf');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <Animated.View
+      style={[styles.container, { paddingTop: insets.top, transform: [{ translateY: swipeY }] }]}
+      {...dismissPan.panHandlers}
+    >
       {/* ── Header ── */}
       <View style={styles.header}>
         <Pressable style={styles.headerBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/')} hitSlop={8}>
@@ -391,7 +420,7 @@ export default function DocumentViewerScreen() {
           <ActivityIndicator color={C.amber} size="large" />
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
