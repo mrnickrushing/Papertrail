@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import { deleteDocumentFiles } from '@/services/fileStorage';
+import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 
 interface DocumentState {
   documents: Document[];
@@ -31,6 +32,10 @@ interface DocumentState {
   removeDocument: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => void;
   moveDocumentToFolder: (documentId: string, folderId: string | null) => void;
+
+  // OCR actions
+  retryOCR: (id: string) => void;
+  processOCRQueue: () => void;
 
   // Bulk document actions
   bulkDelete: (ids: string[]) => Promise<void>;
@@ -114,6 +119,10 @@ export const useDocumentStore = create<DocumentState>()(
         const now = nowIso();
         const full: Document = { ...doc, createdAt: now, updatedAt: now };
         set((s) => ({ documents: [full, ...s.documents] }));
+        // Auto-enqueue OCR for image documents
+        if (!doc.mimeType.includes('pdf') && doc.ocrStatus === 'pending') {
+          enqueueOCR(doc.id, doc.fileUri);
+        }
       },
 
       updateDocument: (id, patch) => {
@@ -124,7 +133,24 @@ export const useDocumentStore = create<DocumentState>()(
         }));
       },
 
+      retryOCR: (id) => {
+        const doc = get().documents.find((d) => d.id === id);
+        if (!doc) return;
+        set((s) => ({
+          documents: s.documents.map((d) =>
+            d.id === id ? { ...d, ocrStatus: 'pending', ocrText: undefined } : d
+          ),
+        }));
+        enqueueOCR(id, doc.fileUri);
+      },
+
+      processOCRQueue: () => {
+        const pending = get().documents.filter((d) => d.ocrStatus === 'pending');
+        for (const doc of pending) enqueueOCR(doc.id, doc.fileUri);
+      },
+
       deleteDocument: async (id) => {
+        dequeueOCR(id);
         const doc = get().documents.find((d) => d.id === id);
         set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
         if (doc) {

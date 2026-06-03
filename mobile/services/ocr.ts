@@ -110,3 +110,61 @@ export function isOCRAvailable(): boolean {
   // return !!NativeModules.VisionOCR || !!NativeModules.MLKitOCR
   return false;
 }
+
+// ─── Metadata extraction ──────────────────────────────────────────────────────
+
+export interface ExtractedMeta {
+  /** ISO date string inferred from text, e.g. a receipt date */
+  inferredDate?: string;
+  /** Dollar/currency amounts found in text */
+  amounts?: number[];
+  /** Likely vendor / issuer name (first capitalised line heuristic) */
+  vendor?: string;
+}
+
+/**
+ * Parses lightweight structured metadata out of raw OCR text.
+ * No ML required — pure regex heuristics that work well for receipts and
+ * invoices.
+ */
+export function extractMetadata(text: string): ExtractedMeta {
+  const meta: ExtractedMeta = {};
+
+  // ── Dates ──────────────────────────────────────────────────────────────────
+  // Match: 01/15/2024  |  Jan 15, 2024  |  2024-01-15
+  const datePatterns = [
+    /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/,
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i,
+    /\b(\d{4})[\/\-](\d{2})[\/\-](\d{2})\b/,
+  ];
+  for (const pat of datePatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const d = new Date(m[0]);
+      if (!isNaN(d.getTime())) {
+        meta.inferredDate = d.toISOString().slice(0, 10);
+        break;
+      }
+    }
+  }
+
+  // ── Currency amounts ───────────────────────────────────────────────────────
+  const amountMatches = text.matchAll(/\$\s?(\d{1,6}(?:,\d{3})*(?:\.\d{2})?)/g);
+  const amounts: number[] = [];
+  for (const m of amountMatches) {
+    const n = parseFloat(m[1].replace(/,/g, ''));
+    if (!isNaN(n)) amounts.push(n);
+  }
+  if (amounts.length) meta.amounts = amounts;
+
+  // ── Vendor (first non-empty capitalised-word line, ≤ 40 chars) ────────────
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  for (const line of lines.slice(0, 5)) {
+    if (line.length <= 40 && /^[A-Z]/.test(line) && !/^\d/.test(line)) {
+      meta.vendor = line;
+      break;
+    }
+  }
+
+  return meta;
+}

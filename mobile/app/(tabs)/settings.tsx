@@ -23,8 +23,8 @@ import { deleteDocumentFiles } from '@/services/fileStorage';
 import { exportAllAsZip } from '@/services/exportService';
 import { C, T, R, S } from '@/theme/tokens';
 
-const APP_VERSION = '0.5.0';
-const BUILD = 'Phase 5 — Multi-select · Bulk ops · Tags · Filters';
+const APP_VERSION = '0.6.0';
+const BUILD = 'Phase 6 — OCR Queue · Metadata Extraction · Search History';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();

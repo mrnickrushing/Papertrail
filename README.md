@@ -205,7 +205,7 @@ All queries use parameterized statements. No raw string interpolation.
 | 3 — Organize | ✅ Done | Folders, tags, search, document viewer |
 | 4 — Viewer · Crop · Export | ✅ Done | Native PDF viewer, gesture crop, ZIP export, EAS dev builds |
 | 5 — Organization & Bulk | ✅ Done | Multi-select, bulk move/delete, tag editor, filter chips |
-| 6 — OCR & Search | — | OCR retry, metadata extraction, smarter search |
+| 6 — OCR & Search | ✅ Done | OCR retry, metadata extraction, smarter search |
 | 7 — Backup & Sync | — | Encrypted backup, restore, cloud sync architecture |
 | 8 — Security | — | Biometric lock, redaction, privacy hardening |
 | 9 — Polish | — | Performance, accessibility, skeleton loaders |

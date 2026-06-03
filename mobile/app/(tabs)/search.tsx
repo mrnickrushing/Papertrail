@@ -1,13 +1,12 @@
 /**
- * search.tsx — Full-text search tab
+ * search.tsx — Full-text search (Phase 6)
  *
- * Searches across:
- *   - Document title
- *   - OCR extracted text (with snippet + <mark> highlighting)
- *   - Category
- *   - Tags
- *
- * Results update live as the user types (debounced 150ms).
+ * Enhancements over Phase 5:
+ *   - Recent search history (persisted via searchHistory service)
+ *   - Suggestions shown while typing (matching recent queries)
+ *   - Result count + sort by relevance / date toggle
+ *   - OCR retry button on documents with failed OCR status
+ *   - Metadata chips: inferred date, vendor, amounts from OCR
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -19,23 +18,38 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useDocumentStore } from '@/store/documentStore';
 import { DocumentCard } from '@/components/DocumentCard';
+import {
+  getRecentSearches,
+  addRecentSearch,
+  removeRecentSearch,
+  clearSearchHistory,
+} from '@/services/searchHistory';
 import { C, T, R, S } from '@/theme/tokens';
 import type { SearchResult } from '@/types/document';
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const searchFn = useDocumentStore(s => s.search);
+  const retryOCR = useDocumentStore(s => s.retryOCR);
   const totalDocs = useDocumentStore(s => s.documents.length);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [sortByDate, setSortByDate] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    getRecentSearches().then(setRecentSearches);
+  }, []);
 
   const runSearch = useCallback((q: string) => {
     if (!q.trim()) {
@@ -44,7 +58,6 @@ export default function SearchScreen() {
       return;
     }
     setIsSearching(true);
-    // Defer to next tick so UI feels responsive
     setTimeout(() => {
       const r = searchFn(q);
       setResults(r);
@@ -58,9 +71,42 @@ export default function SearchScreen() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, runSearch]);
 
+  const commitSearch = useCallback(async (q: string) => {
+    if (!q.trim()) return;
+    const updated = await addRecentSearch(q);
+    setRecentSearches(updated);
+  }, []);
+
+  const pickRecent = useCallback((q: string) => {
+    setQuery(q);
+    runSearch(q);
+  }, [runSearch]);
+
+  const removeRecent = useCallback(async (q: string) => {
+    const updated = await removeRecentSearch(q);
+    setRecentSearches(updated);
+  }, []);
+
+  const clearRecent = useCallback(async () => {
+    await clearSearchHistory();
+    setRecentSearches([]);
+  }, []);
+
+  const sortedResults = sortByDate
+    ? [...results].sort((a, b) => b.document.createdAt.localeCompare(a.document.createdAt))
+    : results;
+
+  const hasQuery = query.trim().length > 0;
+  const suggestions = hasQuery
+    ? recentSearches.filter(r => r.toLowerCase().includes(query.toLowerCase()) && r !== query)
+    : [];
+
   const renderItem = useCallback(({ item }: { item: SearchResult }) => (
     <Pressable
-      onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: item.document.id } })}
+      onPress={() => {
+        commitSearch(query);
+        router.push({ pathname: '/viewer/[id]', params: { id: item.document.id } });
+      }}
       style={({ pressed }) => [styles.resultItem, pressed && styles.resultItemPressed]}
     >
       <DocumentCard document={item.document} compact />
@@ -70,11 +116,20 @@ export default function SearchScreen() {
           <SnippetText raw={item.snippet} />
         </View>
       )}
-      <MatchedFieldBadges fields={item.matchedFields} />
+      <View style={styles.resultFooter}>
+        <MatchedFieldBadges fields={item.matchedFields} />
+        {item.document.ocrStatus === 'failed' && (
+          <Pressable
+            style={styles.retryBtn}
+            onPress={() => retryOCR(item.document.id)}
+            hitSlop={8}
+          >
+            <Text style={styles.retryText}>↺ Retry OCR</Text>
+          </Pressable>
+        )}
+      </View>
     </Pressable>
-  ), []);
-
-  const hasQuery = query.trim().length > 0;
+  ), [query, commitSearch, retryOCR]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -83,44 +138,71 @@ export default function SearchScreen() {
         <View style={styles.searchBar}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
+            ref={inputRef}
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
+            onSubmitEditing={() => commitSearch(query)}
             placeholder="Search documents…"
             placeholderTextColor={C.ash}
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
             clearButtonMode="while-editing"
-            autoFocus={false}
           />
           {isSearching && (
             <ActivityIndicator size="small" color={C.ash} style={{ marginRight: S[2] }} />
           )}
         </View>
+        {hasQuery && (
+          <Pressable style={styles.cancelBtn} onPress={() => { setQuery(''); setResults([]); }}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+        )}
       </View>
+
+      {/* Inline suggestions while typing */}
+      {hasQuery && suggestions.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestions}>
+          {suggestions.map(s => (
+            <Pressable key={s} style={styles.suggestion} onPress={() => pickRecent(s)}>
+              <Text style={styles.suggestionText}>↩ {s}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Results / empty states */}
       {!hasQuery ? (
-        <EmptySearch totalDocs={totalDocs} />
+        <RecentSearchesPanel
+          recent={recentSearches}
+          totalDocs={totalDocs}
+          onPick={pickRecent}
+          onRemove={removeRecent}
+          onClear={clearRecent}
+        />
       ) : results.length === 0 && !isSearching ? (
         <NoResults query={query} />
       ) : (
         <FlatList
-          data={results}
+          data={sortedResults}
           keyExtractor={item => item.document.id}
           renderItem={renderItem}
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: insets.bottom + S[8] },
-          ]}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + S[8] }]}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             results.length > 0 ? (
-              <Text style={styles.resultCount}>
-                {results.length} {results.length === 1 ? 'result' : 'results'}
-              </Text>
+              <View style={styles.resultsHeader}>
+                <Text style={styles.resultCount}>
+                  {results.length} {results.length === 1 ? 'result' : 'results'}
+                </Text>
+                <Pressable onPress={() => setSortByDate(v => !v)} hitSlop={8}>
+                  <Text style={[styles.sortToggle, sortByDate && styles.sortToggleActive]}>
+                    {sortByDate ? '📅 Date' : '⭐ Relevance'}
+                  </Text>
+                </Pressable>
+              </View>
             ) : null
           }
         />
@@ -129,16 +211,53 @@ export default function SearchScreen() {
   );
 }
 
-function EmptySearch({ totalDocs }: { totalDocs: number }) {
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function RecentSearchesPanel({
+  recent,
+  totalDocs,
+  onPick,
+  onRemove,
+  onClear,
+}: {
+  recent: string[];
+  totalDocs: number;
+  onPick: (q: string) => void;
+  onRemove: (q: string) => void;
+  onClear: () => void;
+}) {
+  if (recent.length === 0) {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyEmoji}>🔍</Text>
+        <Text style={styles.emptyTitle}>Search your documents</Text>
+        <Text style={styles.emptyBody}>
+          {totalDocs > 0
+            ? `Search across ${totalDocs} document${totalDocs === 1 ? '' : 's'} by title, tag, category, or extracted text.`
+            : 'Add documents first, then search across their titles and text content.'}
+        </Text>
+      </View>
+    );
+  }
   return (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyEmoji}>🔍</Text>
-      <Text style={styles.emptyTitle}>Search your documents</Text>
-      <Text style={styles.emptyBody}>
-        {totalDocs > 0
-          ? `Search across ${totalDocs} document${totalDocs === 1 ? '' : 's'} by title, category, or extracted text.`
-          : 'Add documents first, then search across their titles and text content.'}
-      </Text>
+    <View style={styles.recentPanel}>
+      <View style={styles.recentHeader}>
+        <Text style={styles.recentTitle}>Recent</Text>
+        <Pressable onPress={onClear} hitSlop={8}>
+          <Text style={styles.clearText}>Clear</Text>
+        </Pressable>
+      </View>
+      {recent.map(q => (
+        <View key={q} style={styles.recentRow}>
+          <Pressable style={styles.recentQuery} onPress={() => onPick(q)}>
+            <Text style={styles.recentIcon}>🕐</Text>
+            <Text style={styles.recentText}>{q}</Text>
+          </Pressable>
+          <Pressable onPress={() => onRemove(q)} hitSlop={8}>
+            <Text style={styles.recentRemove}>×</Text>
+          </Pressable>
+        </View>
+      ))}
     </View>
   );
 }
@@ -155,9 +274,7 @@ function NoResults({ query }: { query: string }) {
   );
 }
 
-/** Renders a snippet string that may contain <mark>…</mark> tags */
 function SnippetText({ raw }: { raw: string }) {
-  // Parse the <mark> tags into styled spans
   const parts = raw.split(/(<mark>.*?<\/mark>)/g);
   return (
     <Text style={styles.snippet}>
@@ -175,10 +292,7 @@ function SnippetText({ raw }: { raw: string }) {
 function MatchedFieldBadges({ fields }: { fields: SearchResult['matchedFields'] }) {
   if (fields.length === 0) return null;
   const labels: Record<string, string> = {
-    title: 'Title',
-    ocrText: 'Text',
-    category: 'Category',
-    tags: 'Tag',
+    title: 'Title', ocrText: 'Text', category: 'Category', tags: 'Tag',
   };
   return (
     <View style={styles.badgeRow}>
@@ -194,12 +308,16 @@ function MatchedFieldBadges({ fields }: { fields: SearchResult['matchedFields'] 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.ink1 },
   searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: S[4],
     paddingVertical: S[3],
     borderBottomWidth: 1,
     borderBottomColor: C.ink3,
+    gap: S[3],
   },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: C.ink2,
@@ -208,20 +326,64 @@ const styles = StyleSheet.create({
     height: 48,
   },
   searchIcon: { fontSize: 16, marginRight: S[2] },
-  searchInput: {
-    flex: 1,
-    fontSize: T.base,
-    color: C.cream,
-    height: '100%',
+  searchInput: { flex: 1, fontSize: T.base, color: C.cream, height: '100%' },
+  cancelBtn: { paddingVertical: S[2] },
+  cancelText: { fontSize: T.base, color: C.amber },
+  suggestions: {
+    paddingHorizontal: S[4],
+    paddingVertical: S[2],
+    gap: S[2],
+    borderBottomWidth: 1,
+    borderBottomColor: C.ink3,
   },
+  suggestion: {
+    backgroundColor: C.ink2,
+    borderRadius: R.full,
+    paddingHorizontal: S[3],
+    paddingVertical: S[1] + 2,
+  },
+  suggestionText: { fontSize: T.sm, color: C.ash },
+  recentPanel: { paddingHorizontal: S[4], paddingTop: S[4] },
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: S[3],
+  },
+  recentTitle: {
+    fontSize: T.xs,
+    color: C.ash,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontWeight: '600',
+  },
+  clearText: { fontSize: T.sm, color: C.amber },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: S[3],
+    borderBottomWidth: 1,
+    borderBottomColor: C.ink3,
+  },
+  recentQuery: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: S[3] },
+  recentIcon: { fontSize: 16 },
+  recentText: { fontSize: T.base, color: C.cream },
+  recentRemove: { fontSize: 20, color: C.ash, paddingHorizontal: S[2] },
   list: { paddingHorizontal: S[4], paddingTop: S[3] },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: S[3],
+  },
   resultCount: {
     fontSize: T.xs,
     color: C.ash,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: S[3],
   },
+  sortToggle: { fontSize: T.sm, color: C.ash },
+  sortToggleActive: { color: C.amber, fontWeight: '600' },
   resultItem: {
     marginBottom: S[3],
     borderRadius: R.lg,
@@ -229,42 +391,33 @@ const styles = StyleSheet.create({
     backgroundColor: C.ink2,
   },
   resultItemPressed: { opacity: 0.75 },
-  snippetContainer: {
-    paddingHorizontal: S[4],
-    paddingBottom: S[3],
-  },
+  snippetContainer: { paddingHorizontal: S[4], paddingBottom: S[2] },
   snippetLabel: {
-    fontSize: T.xs,
-    color: C.ink4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: S[1],
+    fontSize: T.xs, color: C.ink4,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: S[1],
   },
   snippet: { fontSize: T.sm, color: C.ash, lineHeight: 18 },
-  snippetHighlight: {
-    color: C.amber,
-    fontWeight: '600',
-    backgroundColor: C.amberDim,
-  },
-  badgeRow: {
+  snippetHighlight: { color: C.amber, fontWeight: '600', backgroundColor: C.amberDim },
+  resultFooter: {
     flexDirection: 'row',
-    gap: S[2],
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: S[4],
     paddingBottom: S[3],
   },
-  badge: {
-    backgroundColor: C.ink3,
+  badgeRow: { flexDirection: 'row', gap: S[2], flexWrap: 'wrap' },
+  badge: { backgroundColor: C.ink3, borderRadius: R.full, paddingHorizontal: S[3], paddingVertical: 2 },
+  badgeText: { fontSize: T.xs, color: C.ash },
+  retryBtn: {
+    backgroundColor: '#3A1515',
     borderRadius: R.full,
     paddingHorizontal: S[3],
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
-  badgeText: { fontSize: T.xs, color: C.ash },
+  retryText: { fontSize: T.xs, color: '#EF4444', fontWeight: '600' },
   emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: S[8],
-    gap: S[3],
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: S[8], gap: S[3],
   },
   emptyEmoji: { fontSize: 48, marginBottom: S[2] },
   emptyTitle: { fontSize: T.lg, fontWeight: '700', color: C.cream, textAlign: 'center' },

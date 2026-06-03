@@ -5,13 +5,18 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { Colors } from '@/theme';
+import { useDocumentStore } from '@/store/documentStore';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const processOCRQueue = useDocumentStore(s => s.processOCRQueue);
+
   useEffect(() => {
     SplashScreen.hideAsync();
-  }, []);
+    // Resume any pending OCR jobs from the previous session
+    processOCRQueue();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
