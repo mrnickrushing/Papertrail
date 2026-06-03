@@ -126,6 +126,11 @@ export class JsonStore implements PapertrailStore {
     return record;
   }
 
+  async getAnalytics(limit = 500): Promise<AnalyticsRecord[]> {
+    const data = await this.read();
+    return data.analytics.slice(-limit).reverse();
+  }
+
   async addAnalytics(events: Array<Omit<AnalyticsRecord, 'id' | 'createdAt'>>): Promise<number> {
     const data = await this.read();
     const records = events.map((event) => ({

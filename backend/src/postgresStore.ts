@@ -218,6 +218,24 @@ export class PostgresStore implements PapertrailStore {
     }
   }
 
+  async getAnalytics(limit = 500): Promise<AnalyticsRecord[]> {
+    const res = await this.pool.query<{
+      id: string; event: string; device_id: string | null; user_id: string | null;
+      properties: string | null; created_at: string;
+    }>(
+      'SELECT id, event, device_id, user_id, properties, created_at FROM analytics_events ORDER BY created_at DESC LIMIT $1',
+      [limit],
+    );
+    return res.rows.map(r => ({
+      id: r.id,
+      event: r.event,
+      deviceId: r.device_id ?? undefined,
+      userId: r.user_id ?? undefined,
+      properties: r.properties ? JSON.parse(r.properties) : undefined,
+      createdAt: r.created_at,
+    }));
+  }
+
   private async currentVersion(client: pg.PoolClient): Promise<number> {
     const res = await client.query<{ sync_version: string }>(
       'SELECT sync_version FROM sync_state WHERE id = true FOR UPDATE',

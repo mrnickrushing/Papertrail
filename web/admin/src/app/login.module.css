@@ -1,0 +1,29 @@
+.page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ink1);
+  padding: 24px;
+}
+.card {
+  background: var(--ink2);
+  border: 1px solid var(--ink4);
+  border-radius: var(--radius-xl);
+  padding: 48px 40px;
+  width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.icon { width: 72px; height: 72px; border-radius: 16px; margin-bottom: 4px; }
+.title { font-size: 22px; font-weight: 800; color: var(--cream); }
+.subtitle { font-size: 14px; color: var(--ash); margin-bottom: 12px; }
+.form { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.input { width: 100%; }
+.error { font-size: 13px; color: var(--danger); }
+.btn {
+  background: var(--amber); color: var(--ink1);
+  border: none; border-radius: var(--radius-full);
+  padding: 12px; font-size: 15px; font-weight: 700;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn:hover:not(:disabled) { background: var(--amber-hover); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }

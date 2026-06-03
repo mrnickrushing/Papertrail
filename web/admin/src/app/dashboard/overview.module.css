@@ -1,0 +1,51 @@
+.pageTitle { font-size: 28px; font-weight: 800; color: var(--cream); margin-bottom: 4px; }
+.pageSubtitle { font-size: 14px; color: var(--ash); margin-bottom: 32px; }
+
+.errorBanner {
+  background: var(--danger-dim, rgba(208,75,75,0.12));
+  border: 1px solid var(--danger, #D04B4B);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--danger, #D04B4B);
+  margin-bottom: 24px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+.card {
+  background: var(--ink2);
+  border: 1px solid var(--ink4);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.cardLabel { font-size: 12px; font-weight: 600; color: var(--ash); text-transform: uppercase; letter-spacing: 0.6px; }
+.cardValue { font-size: 32px; font-weight: 800; color: var(--cream); }
+.cardMeta { font-size: 12px; color: var(--faint); }
+.success { color: var(--success); }
+.danger { color: var(--danger, #D04B4B); }
+
+.section { margin-bottom: 40px; }
+.sectionTitle { font-size: 16px; font-weight: 700; color: var(--cream); margin-bottom: 14px; }
+
+.badgeGrid { display: flex; flex-wrap: wrap; gap: 10px; }
+.integBadge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: var(--radius-full);
+  font-size: 13px; font-weight: 500; border: 1px solid;
+}
+.integOn {
+  background: var(--success-dim, rgba(77,158,90,0.12));
+  border-color: var(--success);
+  color: var(--success);
+}
+.integOff {
+  background: var(--ink3);
+  border-color: var(--ink4);
+  color: var(--faint);
+}

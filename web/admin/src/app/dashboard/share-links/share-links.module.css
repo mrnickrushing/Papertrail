@@ -1,0 +1,26 @@
+.pageTitle { font-size: 28px; font-weight: 800; color: var(--cream); margin-bottom: 4px; }
+.pageSubtitle { font-size: 14px; color: var(--ash); margin-bottom: 32px; }
+.pageSubtitle code { font-size: 12px; background: var(--ink3); padding: 2px 6px; border-radius: 4px; color: var(--amber); }
+.error {
+  background: var(--danger-dim, rgba(208,75,75,0.12)); border: 1px solid var(--danger, #D04B4B);
+  border-radius: var(--radius-lg); padding: 14px 18px; font-size: 14px; color: var(--danger, #D04B4B); margin-bottom: 24px;
+}
+.infoCard {
+  background: var(--ink2); border: 1px solid var(--ink4); border-radius: var(--radius-xl);
+  padding: 28px; display: flex; gap: 20px; align-items: flex-start; max-width: 680px; margin-bottom: 40px;
+}
+.infoIcon { font-size: 32px; flex-shrink: 0; }
+.infoTitle { font-size: 16px; font-weight: 700; color: var(--cream); margin-bottom: 8px; }
+.infoBody { font-size: 14px; color: var(--ash); line-height: 1.65; }
+.infoBody code { font-size: 12px; background: var(--ink1); padding: 2px 5px; border-radius: 4px; color: var(--amber); }
+.sectionTitle { font-size: 16px; font-weight: 700; color: var(--cream); margin-bottom: 6px; }
+.sectionHint { font-size: 13px; color: var(--faint); margin-bottom: 16px; }
+.docList { max-width: 680px; }
+.empty { color: var(--faint); font-size: 15px; padding: 20px 0; }
+.docRow {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; background: var(--ink2); border: 1px solid var(--ink4);
+  border-radius: var(--radius-md); margin-bottom: 8px;
+}
+.docTitle { font-size: 14px; color: var(--cream); }
+.docId { font-size: 11px; font-family: monospace; color: var(--faint); }

@@ -121,6 +121,41 @@ export async function buildApp(config: RuntimeConfig, store: PapertrailStore = n
     return { ok: true, accepted };
   });
 
+  app.get('/v1/analytics/events', async () => {
+    const events = await store.getAnalytics(500);
+    return { events };
+  });
+
+  // Notification broadcast (admin dashboard)
+  const notificationLog: Array<{
+    id: string; title: string; body: string;
+    sentAt: string; recipientCount: number; filter?: unknown;
+  }> = [];
+
+  app.post('/v1/notifications/broadcast', async (request) => {
+    const { title, body, filter } = request.body as {
+      title: string; body: string; filter?: { isPro?: boolean };
+    };
+    if (!title || !body) {
+      return app.log.error('Missing title/body'), { error: 'title and body required' };
+    }
+    const { randomUUID } = await import('node:crypto');
+    const entry = {
+      id: randomUUID(),
+      title,
+      body,
+      sentAt: new Date().toISOString(),
+      recipientCount: 0,
+      filter: filter ?? null,
+    };
+    notificationLog.unshift(entry);
+    return { ok: true, recipientCount: entry.recipientCount, notificationId: entry.id };
+  });
+
+  app.get('/v1/notifications', async () => {
+    return { notifications: notificationLog.slice(0, 100) };
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: 'Invalid request', details: error.issues });

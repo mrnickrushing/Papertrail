@@ -29,4 +29,5 @@ export interface PapertrailStore {
   getShareLink(token: string): Promise<ShareLinkRecord | null>;
   addInboundEmail(input: Omit<EmailInboundRecord, 'id' | 'receivedAt'>): Promise<EmailInboundRecord>;
   addAnalytics(events: Array<Omit<AnalyticsRecord, 'id' | 'createdAt'>>): Promise<number>;
+  getAnalytics(limit?: number): Promise<AnalyticsRecord[]>;
 }

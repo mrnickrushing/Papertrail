@@ -1,0 +1,226 @@
+/* ── Layout ───────────────────────────────────────────────── */
+.page { min-height: 100vh; }
+
+/* ── Nav ──────────────────────────────────────────────────── */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(15,15,18,0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--ink4);
+}
+.navInner {
+  max-width: 1100px; margin: 0 auto;
+  padding: 0 24px;
+  height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.navBrand { display: flex; align-items: center; gap: 10px; }
+.navIcon { width: 32px; height: 32px; border-radius: 8px; }
+.navName { font-size: 18px; font-weight: 700; color: var(--cream); }
+.navCta {
+  background: var(--amber); color: var(--ink1);
+  padding: 8px 20px; border-radius: var(--radius-full);
+  font-size: 14px; font-weight: 700;
+  transition: background 0.15s;
+}
+.navCta:hover { background: var(--amber-hover); }
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 120px 24px 80px;
+  overflow: hidden;
+  text-align: center;
+}
+.heroGlow {
+  position: absolute;
+  top: 10%; left: 50%; transform: translateX(-50%);
+  width: 700px; height: 500px;
+  background: radial-gradient(ellipse at center, rgba(232,160,32,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.heroContent {
+  position: relative; z-index: 1;
+  max-width: 720px; margin: 0 auto;
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+}
+.heroIcon {
+  width: 120px; height: 120px;
+  border-radius: 26px;
+  box-shadow: 0 20px 60px rgba(232,160,32,0.35), 0 4px 16px rgba(0,0,0,0.6);
+}
+.heroTitle {
+  font-size: clamp(40px, 6vw, 72px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
+  color: var(--cream);
+}
+.heroAccent { color: var(--amber); }
+.heroSubtitle {
+  font-size: clamp(16px, 2vw, 20px);
+  color: var(--ash);
+  line-height: 1.65;
+  max-width: 580px;
+}
+.heroCtas { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.heroNote { font-size: 13px; color: var(--faint); }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.ctaPrimary {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--amber); color: var(--ink1);
+  padding: 14px 28px; border-radius: var(--radius-full);
+  font-size: 16px; font-weight: 700;
+  transition: background 0.15s, transform 0.1s;
+}
+.ctaPrimary:hover { background: var(--amber-hover); transform: translateY(-1px); }
+
+.ctaSecondary {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--ink3); color: var(--cream);
+  padding: 14px 28px; border-radius: var(--radius-full);
+  font-size: 16px; font-weight: 600;
+  border: 1px solid var(--ink4);
+  transition: background 0.15s, transform 0.1s;
+}
+.ctaSecondary:hover { background: var(--ink4); transform: translateY(-1px); }
+
+.ctaOutline {
+  display: inline-block;
+  background: transparent; color: var(--cream);
+  padding: 12px 24px; border-radius: var(--radius-full);
+  font-size: 15px; font-weight: 600;
+  border: 1px solid var(--ink4);
+  transition: border-color 0.15s;
+  text-align: center;
+}
+.ctaOutline:hover { border-color: var(--ash); }
+
+/* ── Section scaffold ─────────────────────────────────────── */
+.sectionInner {
+  max-width: 1100px; margin: 0 auto;
+  padding: 0 24px;
+}
+.sectionTitle {
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800; letter-spacing: -0.5px;
+  color: var(--cream);
+  text-align: center;
+  margin-bottom: 12px;
+}
+.sectionSubtitle {
+  font-size: 18px; color: var(--ash);
+  text-align: center; margin-bottom: 56px;
+}
+
+/* ── Features ─────────────────────────────────────────────── */
+.features { padding: 100px 0; background: var(--ink2); }
+.features .sectionTitle { margin-bottom: 56px; }
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+.featureCard {
+  background: var(--ink1); border-radius: var(--radius-xl);
+  border: 1px solid var(--ink4);
+  padding: 32px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.featureCard:hover { border-color: var(--amber); transform: translateY(-2px); }
+.featureIcon { font-size: 36px; }
+.featureTitle { font-size: 18px; font-weight: 700; color: var(--cream); }
+.featureBody { font-size: 15px; color: var(--ash); line-height: 1.65; }
+
+/* ── How it works ─────────────────────────────────────────── */
+.howItWorks { padding: 100px 0; }
+.howItWorks .sectionTitle { margin-bottom: 56px; }
+.steps { display: flex; flex-direction: column; gap: 32px; max-width: 620px; margin: 0 auto; }
+.step { display: flex; align-items: flex-start; gap: 24px; }
+.stepNum {
+  flex-shrink: 0;
+  width: 44px; height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800; color: var(--amber);
+}
+.stepTitle { font-size: 18px; font-weight: 700; color: var(--cream); margin-bottom: 6px; }
+.stepBody { font-size: 15px; color: var(--ash); line-height: 1.65; }
+
+/* ── Pricing ──────────────────────────────────────────────── */
+.pricing { padding: 100px 0; background: var(--ink2); }
+.pricingGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.pricingCard {
+  background: var(--ink1); border-radius: var(--radius-xl);
+  border: 1px solid var(--ink4);
+  padding: 36px 32px;
+  display: flex; flex-direction: column; gap: 20px;
+  position: relative;
+}
+.pricingCardHighlight {
+  border-color: var(--amber);
+  box-shadow: 0 0 40px rgba(232,160,32,0.12);
+}
+.pricingBadge {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  background: var(--amber); color: var(--ink1);
+  font-size: 12px; font-weight: 700;
+  padding: 4px 14px; border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.pricingName { font-size: 13px; font-weight: 700; color: var(--ash); text-transform: uppercase; letter-spacing: 0.8px; }
+.pricingPrice { font-size: 48px; font-weight: 800; color: var(--cream); line-height: 1; }
+.pricingPeriod { font-size: 18px; font-weight: 400; color: var(--ash); }
+.pricingFeatures { list-style: none; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.pricingFeature { font-size: 15px; color: var(--ash); }
+.pricingCheck { color: var(--success); font-weight: 700; margin-right: 6px; }
+
+/* ── Privacy ──────────────────────────────────────────────── */
+.privacy { padding: 100px 0; }
+.privacyCard {
+  background: var(--ink2); border-radius: var(--radius-xl);
+  border: 1px solid var(--ink4);
+  padding: 64px 48px;
+  text-align: center;
+  max-width: 700px; margin: 0 auto;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+}
+.privacyIcon { font-size: 56px; }
+.privacyTitle { font-size: 32px; font-weight: 800; color: var(--cream); }
+.privacyBody { font-size: 16px; color: var(--ash); line-height: 1.75; max-width: 520px; }
+
+/* ── Footer ───────────────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--ink4);
+  padding: 48px 0;
+  background: var(--ink2);
+}
+.footerInner {
+  max-width: 1100px; margin: 0 auto; padding: 0 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+}
+.footerBrand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: var(--cream); }
+.footerIcon { width: 28px; height: 28px; border-radius: 6px; }
+.footerLinks { display: flex; gap: 24px; }
+.footerLinks a { font-size: 14px; color: var(--ash); transition: color 0.15s; }
+.footerLinks a:hover { color: var(--cream); }
+.footerCopy { font-size: 13px; color: var(--faint); }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .heroCtas { flex-direction: column; align-items: stretch; }
+  .ctaPrimary, .ctaSecondary { justify-content: center; }
+  .privacyCard { padding: 40px 24px; }
+}

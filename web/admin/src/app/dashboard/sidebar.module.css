@@ -1,0 +1,42 @@
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--ink2);
+  border-right: 1px solid var(--ink4);
+  display: flex; flex-direction: column;
+  padding: 20px 12px;
+  min-height: 100vh;
+  position: sticky; top: 0;
+}
+.brand {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px;
+  margin-bottom: 24px;
+}
+.brandIcon { width: 32px; height: 32px; border-radius: 8px; }
+.brandName { font-size: 15px; font-weight: 700; color: var(--cream); }
+.brandBadge {
+  font-size: 10px; font-weight: 700; color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber);
+  padding: 2px 7px; border-radius: var(--radius-full);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.nav { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.navItem {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-md);
+  font-size: 14px; color: var(--ash);
+  transition: background 0.12s, color 0.12s;
+}
+.navItem:hover { background: var(--ink3); color: var(--cream); }
+.navItemActive { background: var(--amber-dim); color: var(--amber); font-weight: 600; }
+.navIcon { font-size: 16px; width: 20px; text-align: center; }
+.logout {
+  background: transparent; border: 1px solid var(--ink4);
+  color: var(--ash); border-radius: var(--radius-md);
+  padding: 10px 12px; font-size: 14px;
+  transition: background 0.12s, color 0.12s;
+  text-align: left;
+}
+.logout:hover { background: var(--danger-dim, rgba(208,75,75,0.1)); color: var(--danger, #D04B4B); border-color: var(--danger, #D04B4B); }
