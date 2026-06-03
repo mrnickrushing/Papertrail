@@ -1,0 +1,94 @@
+.page {
+  min-height: 100vh;
+  background: var(--ink1);
+  padding: 80px 24px;
+}
+
+.inner {
+  max-width: 740px;
+  margin: 0 auto;
+}
+
+.back {
+  display: inline-block;
+  font-size: 14px;
+  color: var(--ash);
+  margin-bottom: 40px;
+  transition: color 0.15s;
+}
+.back:hover { color: var(--amber); }
+
+.title {
+  font-size: clamp(32px, 5vw, 52px);
+  font-weight: 900;
+  color: var(--cream);
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+
+.updated {
+  font-size: 13px;
+  color: var(--faint);
+  margin-bottom: 32px;
+}
+
+.intro {
+  font-size: 17px;
+  color: var(--ash);
+  line-height: 1.75;
+  margin-bottom: 48px;
+  padding: 24px;
+  background: var(--ink2);
+  border-left: 3px solid var(--amber);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.inner h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--cream);
+  margin: 40px 0 12px;
+  letter-spacing: -0.3px;
+}
+
+.inner p {
+  font-size: 15px;
+  color: var(--ash);
+  line-height: 1.8;
+  margin-bottom: 14px;
+}
+
+.inner ul {
+  margin: 0 0 14px 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inner ul li {
+  font-size: 15px;
+  color: var(--ash);
+  line-height: 1.7;
+  padding-left: 20px;
+  position: relative;
+}
+
+.inner ul li::before {
+  content: '–';
+  position: absolute;
+  left: 0;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.inner a {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity 0.15s;
+}
+.inner a:hover { opacity: 0.8; }
+
+.inner strong { color: var(--cream); font-weight: 700; }

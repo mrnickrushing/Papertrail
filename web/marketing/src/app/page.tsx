@@ -337,7 +337,7 @@ export default function Home() {
           <div className={styles.footerLinks}>
             <a href="/privacy">Privacy Policy</a>
             <a href="/terms">Terms of Service</a>
-            <a href="mailto:support@papertrail.app">Support</a>
+            <a href="mailto:admin@rushingtechnologies.com">Support</a>
           </div>
           <p className={styles.footerCopy}>© {new Date().getFullYear()} PaperTrail. Your documents, your device.</p>
         </div>
