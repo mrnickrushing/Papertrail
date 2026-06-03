@@ -70,7 +70,7 @@ export async function getConfig() {
 export async function getSyncStats() {
   return apiFetch<SyncPullResponse>('/v1/sync/pull', {
     method: 'POST',
-    body: JSON.stringify({ sinceVersion: 0 }),
+    body: JSON.stringify({ deviceId: 'admin-dashboard', sinceVersion: 0 }),
   });
 }
 
