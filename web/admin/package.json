@@ -2,6 +2,7 @@
   "name": "papertrail-admin",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
