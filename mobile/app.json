@@ -44,11 +44,11 @@
         { "cameraPermission": "PaperTrail uses your camera to scan documents." }
       ],
       [
-        "react-native-pdf",
+        "@config-plugins/react-native-pdf",
         {}
       ],
       [
-        "react-native-blob-util",
+        "@config-plugins/react-native-blob-util",
         {}
       ]
     ],

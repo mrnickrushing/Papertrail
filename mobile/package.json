@@ -40,6 +40,8 @@
     "react-native-svg": "15.8.0",
     "react-native-pdf": "^6.7.3",
     "react-native-blob-util": "^0.19.4",
+    "@config-plugins/react-native-pdf": "^9.0.0",
+    "@config-plugins/react-native-blob-util": "^9.0.0",
     "jszip": "^3.10.1",
     "zustand": "^5.0.0",
     "@tanstack/react-query": "^5.0.0",

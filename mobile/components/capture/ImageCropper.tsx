@@ -133,8 +133,11 @@ export function ImageCropper({ uri, onConfirm, onCancel }: ImageCropperProps) {
       if (rotation !== 0) actions.push({ rotate: rotation });
 
       if (naturalSize) {
-        // Compute rendered image rect within the square preview area.
-        const { width: nw, height: nh } = naturalSize;
+        // After 90° or 270° rotation the image's axes are swapped, so swap
+        // natural dimensions to match what's actually displayed in the preview.
+        const swapAxes = rotation === 90 || rotation === 270;
+        const nw = swapAxes ? naturalSize.height : naturalSize.width;
+        const nh = swapAxes ? naturalSize.width : naturalSize.height;
         const aspectRatio = nw / nh;
 
         let renderedW: number, renderedH: number, offsetX: number, offsetY: number;
