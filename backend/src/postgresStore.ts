@@ -36,7 +36,7 @@ export class PostgresStore implements PapertrailStore {
       await client.query('BEGIN');
       for (const migration of MIGRATIONS) {
         const existing = await client.query('SELECT id FROM schema_migrations WHERE id = $1', [migration.id]);
-        if (existing.rowCount === 0) {
+        if (!existing.rowCount) {
           await client.query(migration.sql);
           await client.query('INSERT INTO schema_migrations (id) VALUES ($1)', [migration.id]);
         }

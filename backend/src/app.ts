@@ -132,12 +132,12 @@ export async function buildApp(config: RuntimeConfig, store: PapertrailStore = n
     sentAt: string; recipientCount: number; filter?: unknown;
   }> = [];
 
-  app.post('/v1/notifications/broadcast', async (request) => {
+  app.post('/v1/notifications/broadcast', async (request, reply) => {
     const { title, body, filter } = request.body as {
       title: string; body: string; filter?: { isPro?: boolean };
     };
     if (!title || !body) {
-      return app.log.error('Missing title/body'), { error: 'title and body required' };
+      return reply.code(400).send({ error: 'title and body required' });
     }
     const { randomUUID } = await import('node:crypto');
     const entry = {
