@@ -12,15 +12,13 @@ export type BackendConfig = {
   integrations: Record<string, boolean>;
 };
 
-const env = typeof process !== 'undefined' ? process.env ?? {} : {};
-
 export function getApiBaseUrl(): string | null {
-  const raw = env.EXPO_PUBLIC_API_URL?.trim();
+  const raw = process?.env?.EXPO_PUBLIC_API_URL?.trim();
   return raw ? raw.replace(/\/$/, '') : null;
 }
 
 function getApiKey(): string | null {
-  const raw = env.EXPO_PUBLIC_API_KEY?.trim();
+  const raw = process?.env?.EXPO_PUBLIC_API_KEY?.trim();
   return raw || null;
 }
 

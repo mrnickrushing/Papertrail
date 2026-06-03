@@ -28,6 +28,7 @@ import { deleteDocumentFiles } from '@/services/fileStorage';
 import { exportAllAsZip } from '@/services/exportService';
 import { createBackup, restoreBackup } from '@/services/backupService';
 import { getBiometricCapability, authenticate } from '@/services/biometricService';
+import { isBackendConfigured } from '@/services/api';
 import { C, T, R, S } from '@/theme/tokens';
 
 const APP_VERSION = '1.0.0';
@@ -53,6 +54,7 @@ export default function SettingsScreen() {
   const [backupProgress, setBackupProgress] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState<string | null>(null);
+  const backendConfigured = isBackendConfigured();
 
   useEffect(() => {
     getBiometricCapability().then(cap => {
@@ -318,12 +320,13 @@ export default function SettingsScreen() {
           <Divider />
           <SettingsRow label="Build" value={BUILD} />
           <Divider />
-          <SettingsRow label="Storage" value="On-device only" />
+          <SettingsRow label="Storage" value={backendConfigured ? 'Device + cloud metadata' : 'On-device only'} />
         </View>
 
         <Text style={styles.footer}>
-          PaperTrail stores all your documents privately on your device.{'\n'}
-          Nothing is uploaded to any server.
+          {backendConfigured
+            ? 'PaperTrail keeps document files on your device and syncs metadata with your configured backend.'
+            : 'PaperTrail stores all your documents privately on your device.\nNothing is uploaded to any server.'}
         </Text>
       </ScrollView>
     </View>

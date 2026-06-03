@@ -28,6 +28,9 @@
         "backgroundColor": "#0F0F12"
       },
       "package": "com.nitehawk.papertrail",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -41,7 +44,10 @@
       "expo-dev-client",
       [
         "expo-camera",
-        { "cameraPermission": "PaperTrail uses your camera to scan documents." }
+        {
+          "cameraPermission": "PaperTrail uses your camera to scan documents.",
+          "recordAudioAndroid": false
+        }
       ],
       [
         "@config-plugins/react-native-pdf",
