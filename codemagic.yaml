@@ -110,8 +110,7 @@ workflows:
         BUNDLE_ID: com.rushingtechnologies.filetrail
         XCODE_SCHEME: FileTrail
       groups:
-        - app_store_credentials
-        - signing_credentials
+        - ios_credentials
     scripts:
       - name: Install dependencies
         script: |
