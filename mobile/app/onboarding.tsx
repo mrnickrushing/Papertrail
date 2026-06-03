@@ -61,7 +61,8 @@ export default function OnboardingScreen() {
   function finish(skipped: boolean) {
     track(skipped ? 'onboarding_skipped' : 'onboarding_completed');
     setHasOnboarded(true);
-    router.replace('/(tabs)/');
+    // Defer so Zustand persist can flush to AsyncStorage before navigation
+    requestAnimationFrame(() => router.replace('/(tabs)/'));
   }
 
   function next() {

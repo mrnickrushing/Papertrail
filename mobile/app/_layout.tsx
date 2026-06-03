@@ -22,11 +22,15 @@ export default function RootLayout() {
   const hasOnboarded = useAppStore(s => s.hasOnboarded);
   const appStateRef = useRef(AppState.currentState);
 
+  // Run once on mount — capture stable refs so the effect doesn't re-run
+  const processOCRQueueRef = useRef(processOCRQueue);
+  processOCRQueueRef.current = processOCRQueue;
+
   useEffect(() => {
     SplashScreen.hideAsync();
-    processOCRQueue();
+    processOCRQueueRef.current();
     track('app_opened');
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!hasOnboarded) {

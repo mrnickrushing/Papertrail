@@ -12,6 +12,7 @@ import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import { deleteDocumentFiles } from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
+import { Colors } from '@/theme';
 
 interface DocumentState {
   documents: Document[];
@@ -139,6 +140,8 @@ export const useDocumentStore = create<DocumentState>()(
       retryOCR: (id) => {
         const doc = get().documents.find((d) => d.id === id);
         if (!doc) return;
+        // Don't re-enqueue if already queued or processing
+        if (doc.ocrStatus === 'processing') return;
         set((s) => ({
           documents: s.documents.map((d) =>
             d.id === id ? { ...d, ocrStatus: 'pending', ocrText: undefined } : d
@@ -156,12 +159,13 @@ export const useDocumentStore = create<DocumentState>()(
       deleteDocument: async (id) => {
         dequeueOCR(id);
         const doc = get().documents.find((d) => d.id === id);
-        set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
         if (doc) {
+          // Delete file first; remove from state regardless (stale file is recoverable, orphan metadata is not)
           await deleteDocumentFiles(id).catch((error) => {
             console.warn('[documentStore] File cleanup failed:', error);
           });
         }
+        set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
       },
 
       removeDocument: async (id) => get().deleteDocument(id),
@@ -176,8 +180,10 @@ export const useDocumentStore = create<DocumentState>()(
 
       bulkDelete: async (ids) => {
         const docs = get().documents.filter((d) => ids.includes(d.id));
-        set((s) => ({ documents: s.documents.filter((d) => !ids.includes(d.id)) }));
+        ids.forEach(dequeueOCR);
+        // Delete files first, then remove from state
         await Promise.all(docs.map((d) => deleteDocumentFiles(d.id).catch(() => undefined)));
+        set((s) => ({ documents: s.documents.filter((d) => !ids.includes(d.id)) }));
       },
 
       bulkMove: (ids, folderId) => {
@@ -221,7 +227,7 @@ export const useDocumentStore = create<DocumentState>()(
         }));
       },
 
-      addFolder: (name, color = '#F59E0B' /* C.amber */) => {
+      addFolder: (name, color = Colors.primary) => {
         const now = nowIso();
         const folder: Folder = { id: nanoid(), name, color, createdAt: now, updatedAt: now };
         set((s) => ({ folders: [...s.folders, folder] }));

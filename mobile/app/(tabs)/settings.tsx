@@ -187,7 +187,7 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + S[8] }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
       >
         {/* Security */}
         <SectionHeader title="Security" />
