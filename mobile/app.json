@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "PaperTrail",
+    "slug": "papertrail",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D0D0D"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mrnickrushing.papertrail",
+      "infoPlist": {
+        "NSCameraUsageDescription": "PaperTrail uses your camera to scan and capture documents.",
+        "NSPhotoLibraryUsageDescription": "PaperTrail accesses your photo library to import document images.",
+        "NSFaceIDUsageDescription": "PaperTrail uses Face ID to keep your documents secure."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0D0D0D"
+      },
+      "package": "com.mrnickrushing.papertrail",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PaperTrail uses your camera to scan and capture documents."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "PaperTrail uses Face ID to keep your documents secure."
+        }
+      ],
+      "expo-notifications"
+    ],
+    "scheme": "papertrail",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
