@@ -1,13 +1,17 @@
-const BASE = process.env.BACKEND_URL ?? 'http://localhost:4000';
-const KEY = process.env.BACKEND_API_KEY ?? '';
-
-const headers = () => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${KEY}`,
-});
+const headers = () => {
+  const key = process.env.BACKEND_API_KEY ?? '';
+  if (!key) {
+    console.warn('[api] BACKEND_API_KEY is not set — requests will be rejected with 401');
+  }
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${key}`,
+  };
+};
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...init, headers: { ...headers(), ...(init?.headers ?? {}) } });
+  const base = process.env.BACKEND_URL ?? 'http://localhost:4000';
+  const res = await fetch(`${base}${path}`, { ...init, headers: { ...headers(), ...(init?.headers ?? {}) } });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status} ${text}`);
