@@ -70,7 +70,7 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        XCODE_SCHEME: PaperTrail
+        XCODE_SCHEME: FileTrail
     scripts:
       - name: Install mobile dependencies
         script: |
@@ -97,3 +97,110 @@ workflows:
     artifacts:
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - /tmp/xcodebuild_logs/*.log
+
+  ios-testflight:
+    name: iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: com.rushingtechnologies.filetrail
+        XCODE_SCHEME: FileTrail
+      groups:
+        - app_store_credentials
+        - signing_credentials
+    scripts:
+      - name: Install dependencies
+        script: |
+          cd mobile
+          npm ci
+      - name: Set up keychain
+        script: keychain initialize
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add certs to keychain
+        script: keychain add-certificates
+      - name: Set up code signing settings
+        script: |
+          xcode-project use-profiles \
+            --workspace "$CM_BUILD_DIR/mobile/ios/$XCODE_SCHEME.xcworkspace"
+      - name: Prebuild iOS
+        script: |
+          cd mobile
+          npx expo prebuild --platform ios --non-interactive --clean
+      - name: Install CocoaPods dependencies
+        script: |
+          cd mobile/ios
+          pod install
+      - name: Build and sign IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/mobile/ios/$XCODE_SCHEME.xcworkspace" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+      email:
+        recipients:
+          - $CM_EMAIL
+        notify:
+          success: true
+          failure: true
+
+  android-internal:
+    name: Android → Internal Track
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      node: 22
+      java: 17
+      vars:
+        PACKAGE_NAME: com.rushingtechnologies.filetrail
+      groups:
+        - google_play_credentials
+        - android_signing
+    scripts:
+      - name: Install dependencies
+        script: |
+          cd mobile
+          npm ci
+      - name: Set up Android signing
+        script: |
+          echo $CM_KEYSTORE | base64 --decode > /tmp/keystore.jks
+      - name: Prebuild Android
+        script: |
+          cd mobile
+          npx expo prebuild --clean --platform android
+      - name: Build release AAB
+        script: |
+          cd mobile/android
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=/tmp/keystore.jks \
+            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.aab
+      - mobile/android/app/build/outputs/**/*.apk
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+      email:
+        recipients:
+          - $CM_EMAIL
+        notify:
+          success: true
+          failure: true
