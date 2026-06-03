@@ -95,7 +95,14 @@ export default function SettingsScreen() {
               await Promise.all(
                 documents.map(d => deleteDocumentFiles(d.id).catch(() => {})),
               );
-              useDocumentStore.setState({ documents: [], folders: [] });
+              const documentIds = documents.map(d => d.id);
+              const folderIds = folders.map(f => f.id);
+              useDocumentStore.setState((state) => ({
+                documents: [],
+                folders: [],
+                deletedDocumentIds: Array.from(new Set([...state.deletedDocumentIds, ...documentIds])),
+                deletedFolderIds: Array.from(new Set([...state.deletedFolderIds, ...folderIds])),
+              }));
             } finally {
               setIsClearing(false);
             }
@@ -169,6 +176,12 @@ export default function SettingsScreen() {
               useDocumentStore.setState({
                 documents: [...newDocs, ...existing.documents],
                 folders: [...newFolders, ...existing.folders],
+                deletedDocumentIds: existing.deletedDocumentIds.filter(
+                  id => !newDocs.some(doc => doc.id === id)
+                ),
+                deletedFolderIds: existing.deletedFolderIds.filter(
+                  id => !newFolders.some(folder => folder.id === id)
+                ),
               });
 
               Alert.alert(

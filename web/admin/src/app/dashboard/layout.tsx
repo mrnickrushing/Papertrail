@@ -3,8 +3,8 @@ import { isAuthenticated } from '@/lib/auth';
 import Sidebar from './Sidebar';
 import styles from './layout.module.css';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  if (!isAuthenticated()) redirect('/');
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  if (!(await isAuthenticated())) redirect('/');
   return (
     <div className={styles.shell}>
       <Sidebar />

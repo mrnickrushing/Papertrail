@@ -3,7 +3,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
 export async function POST(req: Request) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const { title, body, filter } = await req.json();

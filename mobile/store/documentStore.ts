@@ -12,12 +12,14 @@ import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import { deleteDocumentFiles } from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
-import { syncMetadata } from '@/services/syncService';
+import { syncMetadata, type Tombstone } from '@/services/syncService';
 import { Colors } from '@/theme';
 
 interface DocumentState {
   documents: Document[];
   folders: Folder[];
+  deletedDocumentIds: string[];
+  deletedFolderIds: string[];
   isLoading: boolean;
   error: string | null;
   filters: SearchFilters;
@@ -78,6 +80,18 @@ function buildSnippet(text: string, term: string, windowChars = 120): string {
   return `${start > 0 ? '…' : ''}${raw.replace(re, '<mark>$1</mark>')}${end < text.length ? '…' : ''}`;
 }
 
+function appendUnique(existing: string[], ids: string[]): string[] {
+  const next = new Set(existing);
+  for (const id of ids) next.add(id);
+  return Array.from(next);
+}
+
+function removeSynced(existing: string[], synced: string[]): string[] {
+  if (synced.length === 0) return existing;
+  const syncedSet = new Set(synced);
+  return existing.filter((id) => !syncedSet.has(id));
+}
+
 function applyFilters(documents: Document[], filters: SearchFilters): Document[] {
   let docs = [...documents];
 
@@ -112,6 +126,8 @@ export const useDocumentStore = create<DocumentState>()(
     (set, get) => ({
       documents: [],
       folders: [],
+      deletedDocumentIds: [],
+      deletedFolderIds: [],
       isLoading: false,
       error: null,
       filters: {},
@@ -162,6 +178,8 @@ export const useDocumentStore = create<DocumentState>()(
         await syncMetadata({
           documents: get().documents,
           folders: get().folders,
+          deletedDocumentIds: get().deletedDocumentIds,
+          deletedFolderIds: get().deletedFolderIds,
           mergeDocuments: (incoming) => {
             set((s) => {
               const localById = new Map(s.documents.map((doc) => [doc.id, doc]));
@@ -186,6 +204,38 @@ export const useDocumentStore = create<DocumentState>()(
               return { folders: Array.from(localById.values()) };
             });
           },
+          applyTombstones: async (incoming: Tombstone[]) => {
+            const deletedDocumentIds = incoming
+              .filter((item) => item.kind === 'document')
+              .map((item) => item.id);
+            const deletedFolderIds = incoming
+              .filter((item) => item.kind === 'folder')
+              .map((item) => item.id);
+
+            for (const id of deletedDocumentIds) dequeueOCR(id);
+            await Promise.all(
+              deletedDocumentIds.map((id) => deleteDocumentFiles(id).catch(() => undefined))
+            );
+
+            set((s) => {
+              return {
+                documents: s.documents
+                  .filter((doc) => !deletedDocumentIds.includes(doc.id))
+                  .map((doc) =>
+                    doc.folderId && deletedFolderIds.includes(doc.folderId)
+                      ? { ...doc, folderId: null, updatedAt: nowIso() }
+                      : doc
+                  ),
+                folders: s.folders.filter((folder) => !deletedFolderIds.includes(folder.id)),
+              };
+            });
+          },
+          markDeletesSynced: (documentIds, folderIds) => {
+            set((s) => ({
+              deletedDocumentIds: removeSynced(s.deletedDocumentIds, documentIds),
+              deletedFolderIds: removeSynced(s.deletedFolderIds, folderIds),
+            }));
+          },
         });
       },
 
@@ -198,7 +248,10 @@ export const useDocumentStore = create<DocumentState>()(
             console.warn('[documentStore] File cleanup failed:', error);
           });
         }
-        set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
+        set((s) => ({
+          documents: s.documents.filter((d) => d.id !== id),
+          deletedDocumentIds: appendUnique(s.deletedDocumentIds, [id]),
+        }));
       },
 
       removeDocument: async (id) => get().deleteDocument(id),
@@ -216,7 +269,10 @@ export const useDocumentStore = create<DocumentState>()(
         ids.forEach(dequeueOCR);
         // Delete files first, then remove from state
         await Promise.all(docs.map((d) => deleteDocumentFiles(d.id).catch(() => undefined)));
-        set((s) => ({ documents: s.documents.filter((d) => !ids.includes(d.id)) }));
+        set((s) => ({
+          documents: s.documents.filter((d) => !ids.includes(d.id)),
+          deletedDocumentIds: appendUnique(s.deletedDocumentIds, ids),
+        }));
       },
 
       bulkMove: (ids, folderId) => {
@@ -282,14 +338,18 @@ export const useDocumentStore = create<DocumentState>()(
             documents: s.documents.map((doc) =>
               doc.folderId === id ? { ...doc, folderId: null, updatedAt: nowIso() } : doc
             ),
+            deletedFolderIds: appendUnique(s.deletedFolderIds, [id]),
           }));
           return;
         }
 
         const toDelete = get().documents.filter((doc) => doc.folderId === id);
+        const deletedDocumentIds = toDelete.map((doc) => doc.id);
         set((s) => ({
           folders: s.folders.filter((folder) => folder.id !== id),
           documents: s.documents.filter((doc) => doc.folderId !== id),
+          deletedFolderIds: appendUnique(s.deletedFolderIds, [id]),
+          deletedDocumentIds: appendUnique(s.deletedDocumentIds, deletedDocumentIds),
         }));
         await Promise.all(toDelete.map((doc) => deleteDocumentFiles(doc.id).catch(() => undefined)));
       },
@@ -335,7 +395,12 @@ export const useDocumentStore = create<DocumentState>()(
     {
       name: 'papertrail-documents-v2',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ documents: state.documents, folders: state.folders }),
+      partialize: (state) => ({
+        documents: state.documents,
+        folders: state.folders,
+        deletedDocumentIds: state.deletedDocumentIds,
+        deletedFolderIds: state.deletedFolderIds,
+      }),
     }
   )
 );

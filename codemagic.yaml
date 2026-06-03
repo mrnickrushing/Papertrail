@@ -1,0 +1,99 @@
+workflows:
+  validate-all:
+    name: Validate backend, mobile, admin, and marketing
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 22
+    scripts:
+      - name: Backend install and verify
+        script: |
+          cd backend
+          npm ci
+          npm run typecheck
+          npm run test:build
+          npm audit --audit-level=high
+      - name: Mobile install and verify
+        script: |
+          cd mobile
+          npm ci
+          npx expo install --check
+          npm run typecheck
+          npm run lint
+          npm audit --audit-level=high
+      - name: Admin web install and build
+        script: |
+          cd web/admin
+          npm ci
+          npm run build
+          npm audit --audit-level=high
+      - name: Marketing web install and build
+        script: |
+          cd web/marketing
+          npm ci
+          npm run build
+          npm audit --audit-level=high
+
+  mobile-android-debug:
+    name: Mobile Android debug APK
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      node: 22
+      java: 17
+    scripts:
+      - name: Install mobile dependencies
+        script: |
+          cd mobile
+          npm ci
+      - name: Generate native Android project
+        script: |
+          cd mobile
+          npx expo prebuild --platform android --non-interactive --clean
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/mobile/android/local.properties"
+      - name: Build debug APK
+        script: |
+          cd mobile/android
+          ./gradlew assembleDebug
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.apk
+      - mobile/android/app/build/outputs/**/mapping.txt
+
+  mobile-ios-simulator:
+    name: Mobile iOS simulator app
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      vars:
+        XCODE_SCHEME: PaperTrail
+    scripts:
+      - name: Install mobile dependencies
+        script: |
+          cd mobile
+          npm ci
+      - name: Generate native iOS project
+        script: |
+          cd mobile
+          npx expo prebuild --platform ios --non-interactive --clean
+      - name: Install CocoaPods dependencies
+        script: |
+          cd mobile/ios
+          pod install
+      - name: Build simulator app without code signing
+        script: |
+          xcodebuild \
+            -workspace "$CM_BUILD_DIR/mobile/ios/$XCODE_SCHEME.xcworkspace" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+    artifacts:
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - /tmp/xcodebuild_logs/*.log

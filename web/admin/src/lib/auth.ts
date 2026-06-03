@@ -10,27 +10,28 @@ const SESSION_COOKIE = 'pt_admin_session';
  * function guarantees we always get the live value from the process environment
  * when the function is actually invoked on the server.
  */
-function getAdminPassword(): string {
+function getAdminPassword(): string | null {
   const pw = process.env.ADMIN_PASSWORD;
   if (!pw) {
     console.warn(
       '[auth] ADMIN_PASSWORD environment variable is not set. ' +
-        'Falling back to default password. ' +
-        'Set ADMIN_PASSWORD in your Railway service variables.'
+        'Admin login is disabled until ADMIN_PASSWORD is set.'
     );
-    return 'changeme';
+    return null;
   }
   return pw;
 }
 
-export function isAuthenticated(): boolean {
-  const store = cookies();
+export async function isAuthenticated(): Promise<boolean> {
+  const store = await cookies();
   const val = store.get(SESSION_COOKIE)?.value;
-  return val === getAdminPassword();
+  const password = getAdminPassword();
+  return Boolean(password && val === password);
 }
 
 export function verifyPassword(password: string): boolean {
-  return password === getAdminPassword();
+  const configuredPassword = getAdminPassword();
+  return Boolean(configuredPassword && password === configuredPassword);
 }
 
 export { SESSION_COOKIE };
