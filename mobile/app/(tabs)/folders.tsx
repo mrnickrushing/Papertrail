@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useDocumentStore } from '@/store/documentStore';
 import { DocumentCard } from '@/components/DocumentCard';
+import { FAB } from '@/components/FAB';
 import { C, T, R, S } from '@/theme/tokens';
 import type { Folder } from '@/types/document';
 
@@ -131,7 +132,7 @@ export default function FoldersScreen() {
           <FlatList
             data={folderDocs}
             keyExtractor={d => d.id}
-            contentContainerStyle={{ padding: S[4], paddingBottom: insets.bottom + S[8] }}
+            contentContainerStyle={{ padding: S[4], paddingBottom: insets.bottom + 100 }}
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: item.id } })}
@@ -159,7 +160,7 @@ export default function FoldersScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: insets.bottom + S[8] },
+          { paddingBottom: insets.bottom + 100 },
         ]}
       >
         {/* Unfiled */}
@@ -211,6 +212,8 @@ export default function FoldersScreen() {
           })
         )}
       </ScrollView>
+
+      <FAB onPress={openCreate} />
 
       {/* Create / Edit Modal */}
       <Modal

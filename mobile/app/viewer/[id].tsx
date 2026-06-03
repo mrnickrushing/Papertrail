@@ -72,7 +72,11 @@ export default function DocumentViewerScreen() {
   const document = useDocumentStore(s => s.getDocument(id));
   const updateDocument = useDocumentStore(s => s.updateDocument);
   const updateDocumentTags = useDocumentStore(s => s.updateDocumentTags);
-  const getAllTags = useDocumentStore(s => s.getAllTags);
+  const allDocumentTags = useDocumentStore(s => {
+    const tagSet = new Set<string>();
+    for (const doc of s.documents) for (const tag of doc.tags) tagSet.add(tag);
+    return Array.from(tagSet).sort();
+  });
   const deleteDocument = useDocumentStore(s => s.deleteDocument);
   const toggleFavorite = useDocumentStore(s => s.toggleFavorite);
 
@@ -157,7 +161,7 @@ export default function DocumentViewerScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* ── Header ── */}
       <View style={styles.header}>
-        <Pressable style={styles.headerBtn} onPress={() => router.back()} hitSlop={8}>
+        <Pressable style={styles.headerBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/')} hitSlop={8}>
           <Text style={styles.headerBtnText}>‹</Text>
         </Pressable>
 
@@ -333,7 +337,7 @@ export default function DocumentViewerScreen() {
       <TagEditor
         visible={showTagEditor}
         initialTags={document.tags}
-        allTags={getAllTags()}
+        allTags={allDocumentTags}
         onConfirm={(tags) => {
           updateDocumentTags(document.id, tags);
           setShowTagEditor(false);
