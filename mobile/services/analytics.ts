@@ -9,6 +9,8 @@
  * Events follow the noun_verb convention: document_added, search_performed…
  */
 
+import { apiRequest, isBackendConfigured } from '@/services/api';
+
 export type AnalyticsEvent =
   | 'app_opened'
   | 'onboarding_started'
@@ -46,18 +48,22 @@ export function disableAnalytics(): void {
 
 /** Fire an event. No-op when disabled or in dev. */
 export function track(event: AnalyticsEvent, props?: AnalyticsProperties): void {
-  if (!_enabled) return;
-  void event;
-  void props;
-  // In production: AnalyticsProvider.track(event, props);
-  // For now: intentional no-op stub
+  if (!_enabled || !isBackendConfigured()) return;
+  void apiRequest('/v1/analytics/events', {
+    method: 'POST',
+    body: { events: [{ event, properties: props }] },
+    timeoutMs: 5000,
+  }).catch(() => undefined);
 }
 
 /** Identify user (Pro tier). No-op in free build. */
 export function identify(userId: string, traits?: AnalyticsProperties): void {
-  void userId;
-  void traits;
-  // Pro tier: AnalyticsProvider.identify(userId, traits);
+  if (!_enabled || !isBackendConfigured()) return;
+  void apiRequest('/v1/analytics/events', {
+    method: 'POST',
+    body: { events: [{ event: 'identify', userId, properties: traits }] },
+    timeoutMs: 5000,
+  }).catch(() => undefined);
 }
 
 /** Screen view tracking. */

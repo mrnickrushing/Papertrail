@@ -1,0 +1,33 @@
+{
+  "name": "@papertrail/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "migrate": "node dist/migrate.js",
+    "migrate:dev": "tsx src/migrate.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test dist/**/*.test.js",
+    "test:build": "npm run build && npm run test"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.8.5",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.2"
+  }
+}

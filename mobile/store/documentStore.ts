@@ -12,6 +12,7 @@ import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import { deleteDocumentFiles } from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
+import { syncMetadata } from '@/services/syncService';
 import { Colors } from '@/theme';
 
 interface DocumentState {
@@ -37,6 +38,7 @@ interface DocumentState {
   // OCR actions
   retryOCR: (id: string) => void;
   processOCRQueue: () => void;
+  syncWithBackend: () => Promise<void>;
 
   // Bulk document actions
   bulkDelete: (ids: string[]) => Promise<void>;
@@ -154,6 +156,37 @@ export const useDocumentStore = create<DocumentState>()(
         // Only enqueue docs that are pending (not already processing or done)
         const pending = get().documents.filter((d) => d.ocrStatus === 'pending');
         for (const doc of pending) enqueueOCR(doc.id, doc.fileUri);
+      },
+
+      syncWithBackend: async () => {
+        await syncMetadata({
+          documents: get().documents,
+          folders: get().folders,
+          mergeDocuments: (incoming) => {
+            set((s) => {
+              const localById = new Map(s.documents.map((doc) => [doc.id, doc]));
+              for (const doc of incoming) {
+                const local = localById.get(doc.id);
+                if (!local || doc.updatedAt > local.updatedAt) {
+                  localById.set(doc.id, { ...local, ...doc });
+                }
+              }
+              return { documents: Array.from(localById.values()) };
+            });
+          },
+          mergeFolders: (incoming) => {
+            set((s) => {
+              const localById = new Map(s.folders.map((folder) => [folder.id, folder]));
+              for (const folder of incoming) {
+                const local = localById.get(folder.id);
+                if (!local || folder.updatedAt > local.updatedAt) {
+                  localById.set(folder.id, folder);
+                }
+              }
+              return { folders: Array.from(localById.values()) };
+            });
+          },
+        });
       },
 
       deleteDocument: async (id) => {

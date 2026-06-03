@@ -16,6 +16,7 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const processOCRQueue = useDocumentStore(s => s.processOCRQueue);
+  const syncWithBackend = useDocumentStore(s => s.syncWithBackend);
   const biometricEnabled = useAppStore(s => s.biometricEnabled);
   const isLocked = useAppStore(s => s.isLocked);
   const setLocked = useAppStore(s => s.setLocked);
@@ -25,10 +26,13 @@ export default function RootLayout() {
   // Run once on mount — capture stable refs so the effect doesn't re-run
   const processOCRQueueRef = useRef(processOCRQueue);
   processOCRQueueRef.current = processOCRQueue;
+  const syncWithBackendRef = useRef(syncWithBackend);
+  syncWithBackendRef.current = syncWithBackend;
 
   useEffect(() => {
     SplashScreen.hideAsync();
     processOCRQueueRef.current();
+    void syncWithBackendRef.current().catch(() => undefined);
     track('app_opened');
   }, []);
 

@@ -40,6 +40,9 @@ yarn-error.*
 build/
 dist/
 
+# Backend local persistence
+backend/.data/
+
 # Python
 __pycache__/
 *.py[cod]
