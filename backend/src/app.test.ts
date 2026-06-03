@@ -23,6 +23,7 @@ const config: RuntimeConfig = {
     supabase: false,
     r2: false,
     openai: false,
+    anthropic: false,
     postmark: false,
   },
 };

@@ -13,6 +13,7 @@ export type RuntimeConfig = {
     supabase: boolean;
     r2: boolean;
     openai: boolean;
+    anthropic: boolean;
     postmark: boolean;
   };
 };
@@ -42,6 +43,7 @@ export function loadConfig(): RuntimeConfig {
         'CLOUDFLARE_R2_BUCKET',
       ),
       openai: boolFromEnv('OPENAI_API_KEY'),
+      anthropic: boolFromEnv('ANTHROPIC_API_KEY'),
       postmark: boolFromEnv('POSTMARK_INBOUND_TOKEN'),
     },
   };

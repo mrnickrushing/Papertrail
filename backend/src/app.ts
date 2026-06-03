@@ -82,7 +82,7 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
 
   app.post('/v1/ai/suggest-document', async (request) => {
     const input = parseBody(aiSuggestSchema, request.body);
-    return suggestDocument(input);
+    return await suggestDocument(input);
   });
 
   app.post('/v1/share-links', async (request) => {

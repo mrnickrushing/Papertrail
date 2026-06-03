@@ -34,6 +34,7 @@ import { useAppStore, useDocumentStore } from '@/store';
 import { saveDocumentFile, generateThumbnail, getFileSize, getExtension } from '@/services/fileStorage';
 import { extractText, isOCRAvailable } from '@/services/ocr';
 import { isPDFLike } from '@/services/pdfService';
+import { apiRequest, isBackendConfigured } from '@/services/api';
 import { C, T, R, S } from '@/theme/tokens';
 import type { DocumentCategory } from '@/types/document';
 
@@ -77,6 +78,7 @@ export default function DocumentReviewScreen() {
   const [category, setCategory] = useState<DocumentCategory>('other');
   const [ocrText, setOCRText] = useState<string | null>(null);
   const [ocrStatus, setOCRStatus] = useState<'idle' | 'processing' | 'done' | 'unavailable'>('idle');
+  const [aiStatus, setAiStatus] = useState<'idle' | 'processing' | 'done'>('idle');
   const [isSaving, setIsSaving] = useState(false);
   const isMounted = useRef(true);
 
@@ -85,7 +87,7 @@ export default function DocumentReviewScreen() {
     return () => { isMounted.current = false; };
   }, []);
 
-  // Auto-run OCR on images (not PDFs in Phase 2)
+  // Auto-run OCR then AI suggestions
   useEffect(() => {
     if (!params.uri || isPDFLike(params.uri, params.mimeType)) {
       setOCRStatus('unavailable');
@@ -98,10 +100,33 @@ export default function DocumentReviewScreen() {
 
     setOCRStatus('processing');
     extractText(params.uri)
-      .then(result => {
+      .then(async (result) => {
         if (!isMounted.current) return;
-        setOCRText(result.text || null);
+        const text = result.text || null;
+        setOCRText(text);
         setOCRStatus('done');
+
+        // Call backend AI to suggest title + category + tags
+        if (text && isBackendConfigured()) {
+          setAiStatus('processing');
+          try {
+            const suggestion = await apiRequest<{
+              suggestedTitle: string;
+              category: DocumentCategory;
+              tags: string[];
+              source: string;
+            }>('/v1/ai/suggest-document', {
+              method: 'POST',
+              body: { ocrText: text, mimeType: params.mimeType },
+            });
+            if (!isMounted.current) return;
+            if (suggestion.suggestedTitle) setTitle(suggestion.suggestedTitle);
+            if (suggestion.category) setCategory(suggestion.category);
+            setAiStatus('done');
+          } catch {
+            if (isMounted.current) setAiStatus('idle');
+          }
+        }
       })
       .catch(() => {
         if (!isMounted.current) return;
@@ -210,7 +235,7 @@ export default function DocumentReviewScreen() {
           )}
         </View>
 
-        {/* OCR Status */}
+        {/* OCR + AI Status */}
         <View style={styles.ocrRow}>
           {ocrStatus === 'processing' && (
             <>
@@ -218,7 +243,19 @@ export default function DocumentReviewScreen() {
               <Text style={styles.ocrText}>Extracting text…</Text>
             </>
           )}
-          {ocrStatus === 'done' && (
+          {ocrStatus === 'done' && aiStatus === 'processing' && (
+            <>
+              <ActivityIndicator size="small" color={C.amber} style={{ marginRight: S[2] }} />
+              <Text style={styles.ocrText}>AI analysing document…</Text>
+            </>
+          )}
+          {ocrStatus === 'done' && aiStatus === 'done' && (
+            <>
+              <Text style={styles.ocrDot}>✦</Text>
+              <Text style={styles.ocrText}>AI filled title & category</Text>
+            </>
+          )}
+          {ocrStatus === 'done' && aiStatus === 'idle' && (
             <>
               <Text style={styles.ocrDot}>✓</Text>
               <Text style={styles.ocrText}>
