@@ -55,7 +55,7 @@ export default function FolderScreen() {
         renderItem={({ item }) => (
           <DocumentCard
             document={item}
-            onPress={() => router.push(`/document/${item.id}`)}
+            onPress={() => router.push(`/viewer/${item.id}`)}
           />
         )}
         ListEmptyComponent={

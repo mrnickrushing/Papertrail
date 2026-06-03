@@ -6,12 +6,13 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function formatRelativeDate(ms: number): string {
-  const diff = Date.now() - ms;
+export function formatRelativeDate(value: number | string): string {
+  const date = new Date(value);
+  const diff = Date.now() - date.getTime();
   if (diff < 60_000) return 'just now';
-  return formatDistanceToNow(new Date(ms), { addSuffix: true });
+  return formatDistanceToNow(date, { addSuffix: true });
 }
 
-export function formatDate(ms: number): string {
-  return format(new Date(ms), 'MMM d, yyyy');
+export function formatDate(value: number | string): string {
+  return format(new Date(value), 'MMM d, yyyy');
 }

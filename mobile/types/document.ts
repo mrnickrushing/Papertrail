@@ -59,3 +59,17 @@ export interface SearchResult {
   /** Which fields matched */
   matchedFields: Array<'title' | 'ocrText' | 'category' | 'tags'>;
 }
+
+
+export type SortField = 'title' | 'createdAt' | 'updatedAt' | 'fileSizeBytes' | 'category';
+export type SortDirection = 'asc' | 'desc';
+
+export interface SearchFilters {
+  query?: string;
+  category?: DocumentCategory;
+  folderId?: string | null;
+  tags?: string[];
+  isFavorite?: boolean;
+  sortBy?: SortField;
+  sortDir?: SortDirection;
+}

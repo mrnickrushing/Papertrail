@@ -1,7 +1,7 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet,
-  Pressable, ActivityIndicator, RefreshControl,
+  Pressable, ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +14,12 @@ import { Colors, Typography, Spacing } from '@/theme';
 export default function VaultScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { documents, isLoading, loadDocuments } = useDocumentStore();
+  const { documents, isLoading, loadDocuments, filters } = useDocumentStore();
+  const visibleDocuments = useMemo(() => {
+    let docs = [...documents];
+    if (filters.category) docs = docs.filter((doc) => doc.category === filters.category);
+    return docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [documents, filters.category]);
 
   const onRefresh = useCallback(() => loadDocuments(), [loadDocuments]);
 
@@ -24,7 +29,7 @@ export default function VaultScreen() {
       <View style={[styles.header, { paddingTop: insets.top + Spacing['4'] }]}>
         <Text style={styles.headerTitle}>PaperTrail</Text>
         <Text style={styles.headerSub}>
-          {documents.length} document{documents.length !== 1 ? 's' : ''}
+          {visibleDocuments.length} document{visibleDocuments.length !== 1 ? 's' : ''}
         </Text>
       </View>
 
@@ -32,23 +37,23 @@ export default function VaultScreen() {
       <CategoryBar />
 
       {/* Document list */}
-      {isLoading && documents.length === 0 ? (
+      {isLoading && visibleDocuments.length === 0 ? (
         <ActivityIndicator
           color={Colors.primary}
           style={{ flex: 1, alignSelf: 'center' }}
         />
       ) : (
         <FlatList
-          data={documents}
+          data={visibleDocuments}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[
             styles.list,
-            documents.length === 0 && styles.listEmpty,
+            visibleDocuments.length === 0 && styles.listEmpty,
           ]}
           renderItem={({ item }) => (
             <DocumentCard
               document={item}
-              onPress={() => router.push(`/document/${item.id}`)}
+              onPress={() => router.push(`/viewer/${item.id}`)}
             />
           )}
           ListEmptyComponent={
@@ -89,7 +94,7 @@ function CategoryBar() {
   const active = filters.category;
 
   return (
-    <View style={styles.chips}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
       {CATEGORIES.map((c) => {
         const isActive = active === c.key;
         return (
@@ -105,7 +110,7 @@ function CategoryBar() {
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 

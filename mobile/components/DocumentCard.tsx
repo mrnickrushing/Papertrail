@@ -66,7 +66,7 @@ export function DocumentCard({
 
   if (compact) {
     return (
-      <View style={styles.compactCard}>
+      <Pressable style={styles.compactCard} onPress={onPress} onLongPress={onLongPress}>
         {/* Thumbnail or category color block */}
         <View style={styles.compactThumb}>
           {document.thumbnailUri ? (
@@ -94,12 +94,12 @@ export function DocumentCard({
         {document.isFavorite && (
           <Text style={styles.favStar}>★</Text>
         )}
-      </View>
+      </Pressable>
     );
   }
 
   return (
-    <View style={styles.card}>
+    <Pressable style={styles.card} onPress={onPress} onLongPress={onLongPress}>
       {/* Category accent — uses borderLeftWidth instead of absolute positioned strip
           to avoid overflow:hidden clipping the corner radius */}
       <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
@@ -143,7 +143,7 @@ export function DocumentCard({
           )}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

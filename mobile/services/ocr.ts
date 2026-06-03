@@ -108,5 +108,5 @@ export async function extractText(
 export function isOCRAvailable(): boolean {
   // In a real bare build, check if the native module is linked:
   // return !!NativeModules.VisionOCR || !!NativeModules.MLKitOCR
-  return Platform.OS === 'ios' || Platform.OS === 'android';
+  return false;
 }

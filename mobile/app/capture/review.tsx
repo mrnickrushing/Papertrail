@@ -30,11 +30,10 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nanoid } from 'nanoid/non-secure';
-import { useDocumentStore } from '@/store/documentStore';
+import { useDocumentStore, useSettingsStore } from '@/store';
 import { saveDocumentFile, generateThumbnail, getFileSize, getExtension } from '@/services/fileStorage';
 import { extractText, isOCRAvailable } from '@/services/ocr';
-import { isPDF } from '@/services/pdfService';
-import { CategoryBadge } from '@/components/CategoryBadge';
+import { isPDFLike } from '@/services/pdfService';
 import { C, T, R, S } from '@/theme/tokens';
 import type { DocumentCategory } from '@/types/document';
 
@@ -72,6 +71,7 @@ export default function DocumentReviewScreen() {
   }>();
 
   const addDocument = useDocumentStore(s => s.addDocument);
+  const autoOcr = useSettingsStore(s => s.autoOcr);
 
   const [title, setTitle] = useState(() => generateTitle(params.source, params.mimeType));
   const [category, setCategory] = useState<DocumentCategory>('other');
@@ -87,11 +87,11 @@ export default function DocumentReviewScreen() {
 
   // Auto-run OCR on images (not PDFs in Phase 2)
   useEffect(() => {
-    if (!params.uri || isPDF(params.uri)) {
+    if (!params.uri || isPDFLike(params.uri, params.mimeType)) {
       setOCRStatus('unavailable');
       return;
     }
-    if (!isOCRAvailable()) {
+    if (!autoOcr || !isOCRAvailable()) {
       setOCRStatus('unavailable');
       return;
     }
@@ -102,7 +102,7 @@ export default function DocumentReviewScreen() {
       setOCRText(result.text || null);
       setOCRStatus('done');
     });
-  }, [params.uri]);
+  }, [params.mimeType, params.uri, autoOcr]);
 
   const handleSave = useCallback(async () => {
     if (!params.uri || isSaving) return;
@@ -118,8 +118,9 @@ export default function DocumentReviewScreen() {
       const localUri = await saveDocumentFile(documentId, params.uri, ext);
 
       // 2. Generate thumbnail
-      const thumbnailUri = isPDF(params.uri)
-        ? null // PDF thumbnails in Phase 3
+      const isPdfDoc = isPDFLike(params.uri, params.mimeType);
+      const thumbnailUri = isPdfDoc
+        ? null
         : await generateThumbnail(documentId, params.uri);
 
       // 3. Get file size
@@ -153,7 +154,7 @@ export default function DocumentReviewScreen() {
     }
   }, [params, title, category, ocrText, ocrStatus, addDocument, isSaving]);
 
-  const isImage = !isPDF(params.uri ?? '');
+  const isImage = !isPDFLike(params.uri ?? '', params.mimeType);
 
   return (
     <KeyboardAvoidingView

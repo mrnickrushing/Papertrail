@@ -15,7 +15,7 @@ export default function DocumentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { documents, removeDocument } = useDocumentStore();
+  const { documents, deleteDocument } = useDocumentStore();
   const [doc, setDoc] = useState<Document | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function DocumentDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await removeDocument(doc.id);
+            await deleteDocument(doc.id);
             router.back();
           },
         },
@@ -60,7 +60,7 @@ export default function DocumentDetailScreen() {
         <CategoryBadge category={doc.category} size="lg" />
         <Text style={styles.title} numberOfLines={3}>{doc.title}</Text>
         <Text style={styles.meta}>
-          {formatDate(doc.createdAt)} · {formatFileSize(doc.fileSize)}
+          {formatDate(doc.createdAt)} · {formatFileSize(doc.fileSizeBytes)}
         </Text>
       </View>
 
@@ -75,9 +75,7 @@ export default function DocumentDetailScreen() {
           label="OCR"
           value={doc.ocrStatus === 'done' ? '✓ Complete' : doc.ocrStatus}
         />
-        {doc.expiresAt && (
-          <MetaRow label="Expires" value={formatDate(doc.expiresAt)} />
-        )}
+
       </View>
 
       {/* OCR text preview */}
@@ -87,14 +85,6 @@ export default function DocumentDetailScreen() {
           <Text style={styles.ocrText}>{doc.ocrText}</Text>
         </View>
       )}
-
-      {/* Notes */}
-      <View style={styles.card}>
-        <Text style={styles.sectionLabel}>Notes</Text>
-        <Text style={[styles.ocrText, !doc.notes && { color: Colors.textFaint }]}>
-          {doc.notes || 'No notes yet'}
-        </Text>
-      </View>
 
       {/* Actions */}
       <View style={styles.actions}>

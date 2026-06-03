@@ -38,6 +38,8 @@ export const Colors = {
   warningHighlight: '#2E1E10',
   error:            '#D04B4B',
   errorHighlight:   '#2E1212',
+  danger:           '#D04B4B',
+  dangerHighlight:  '#2E1212',
   info:             '#4A8FC4',
   infoHighlight:    '#102030',
 
@@ -121,11 +123,8 @@ export const duration = {
 export const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 export const MIN_TOUCH = 44;
 
-<<<<<<< HEAD
-=======
 // ─── Shorthand aliases used in Phase 2+ components ──────────────────────────
 
->>>>>>> main
 export const C = {
   ink1:     Colors.bg,
   ink2:     Colors.surface,

@@ -12,7 +12,7 @@ interface AppState {
 
   // Settings
   viewMode: 'card' | 'list';
-  sortBy: 'updatedAt' | 'createdAt' | 'title' | 'type';
+  sortBy: 'updatedAt' | 'createdAt' | 'title' | 'category';
   sortDir: 'asc' | 'desc';
 
   // Pro

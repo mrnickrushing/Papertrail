@@ -2,19 +2,19 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Colors, T, S, Font, Radius } from '@/theme';
 import { useDocumentStore } from '@/store/documentStore';
 
-const CRITICAL_TYPES = ['id', 'insurance', 'medical', 'tax'];
+const CRITICAL_TYPES = ['id', 'medical', 'tax', 'warranty'] as const;
 
 export function HealthScoreBanner() {
   const documents = useDocumentStore((s) => s.documents);
 
-  const presentTypes = new Set(documents.map((d) => d.type));
-  const missingTypes = CRITICAL_TYPES.filter((t) => !presentTypes.has(t as any));
+  const presentTypes = new Set(documents.map((d) => d.category));
+  const missingTypes = CRITICAL_TYPES.filter((type) => !presentTypes.has(type));
   const score = Math.round(
     ((CRITICAL_TYPES.length - missingTypes.length) / CRITICAL_TYPES.length) * 100
   );
 
   const color =
-    score >= 75 ? Colors.success : score >= 50 ? Colors.warning : Colors.danger;
+    score >= 75 ? Colors.success : score >= 50 ? Colors.warning : Colors.error;
 
   return (
     <View style={styles.banner}>

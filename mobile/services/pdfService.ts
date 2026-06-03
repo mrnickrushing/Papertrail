@@ -48,3 +48,12 @@ export async function getPDFInfo(uri: string): Promise<PDFInfo> {
 export function isPDF(uri: string): boolean {
   return uri.toLowerCase().endsWith('.pdf') || uri.toLowerCase().includes('application/pdf');
 }
+
+
+/**
+ * Returns whether a URI or optional MIME type points to a PDF file.
+ * Content URIs often do not preserve extensions, so prefer MIME when present.
+ */
+export function isPDFLike(uri: string, mimeType?: string | null): boolean {
+  return Boolean(mimeType?.toLowerCase().includes('pdf')) || isPDF(uri);
+}
