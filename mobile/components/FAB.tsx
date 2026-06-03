@@ -3,23 +3,25 @@ import { Pressable, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Radius, Shadows, Spacing } from '@/theme';
 
+// Floating tab bar height + gap — must match (tabs)/_layout.tsx
+const TAB_BAR_HEIGHT = 62;
+const TAB_BAR_GAP = 8; // bottom offset from safe area
+
 interface Props {
   onPress: () => void;
 }
 
 export function FAB({ onPress }: Props) {
   const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+  // Position FAB above the floating pill tab bar
+  const fabBottom = bottomInset + TAB_BAR_GAP + TAB_BAR_HEIGHT + Spacing['3'];
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.fab,
-        {
-          bottom:
-            (Platform.OS === 'ios' ? 90 : 72) +
-            insets.bottom +
-            Spacing['4'],
-        },
+        { bottom: fabBottom },
         pressed && styles.pressed,
       ]}
       onPress={onPress}
@@ -43,7 +45,7 @@ const styles = StyleSheet.create({
     alignItems:      'center',
     ...Shadows.lg,
   },
-  pressed: { transform: [{ scale: 0.93 }], opacity: 0.9 },
+  pressed: { transform: [{ scale: 0.92 }], opacity: 0.88 },
   icon: {
     fontSize:   28,
     color:      Colors.textInverse,

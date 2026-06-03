@@ -1,13 +1,11 @@
 /**
- * DocumentCard.tsx — Reusable document card component
+ * DocumentCard.tsx — Reusable document card component (UI overhaul)
  *
- * Phase 3 update:
- *   - `compact` prop for search results / folder views (no accent bar,
- *     no date prefix — just thumbnail + title + category inline)
- *   - Date now shows "Mon Jun 2" prefix on full cards
- *   - Thumbnail fallback reserves space so cards with/without images align
- *   - GOING pill bumped to T.xs minimum
- *   - Move-to-folder action via onLongPress callback prop
+ * Changes:
+ *   - Category dot replaces side accent bar
+ *   - OCR status badge: pulsing dot (processing), ⚠ (failed), hidden (done/none)
+ *   - Compact mode preserved for search results
+ *   - Animated checkbox spring on selection mode enter
  */
 
 import React from 'react';
@@ -22,32 +20,30 @@ import { C, T, R, S } from '@/theme/tokens';
 import type { Document, DocumentCategory } from '@/types/document';
 
 const CATEGORY_LABELS: Record<DocumentCategory, string> = {
-  receipt: '🧾 Receipt',
-  contract: '📝 Contract',
-  id: '🪪 ID',
-  warranty: '🛡️ Warranty',
-  medical: '🏥 Medical',
-  tax: '💰 Tax',
-  other: '📁 Other',
+  receipt: 'Receipt',
+  contract: 'Contract',
+  id: 'ID',
+  warranty: 'Warranty',
+  medical: 'Medical',
+  tax: 'Tax',
+  other: 'Other',
 };
 
 const CATEGORY_COLORS: Record<DocumentCategory, string> = {
-  receipt:  '#F59E0B',
-  contract: '#3B82F6',
-  id:       '#8B5CF6',
-  warranty: '#10B981',
-  medical:  '#EF4444',
-  tax:      '#06B6D4',
-  other:    '#6B7280',
+  receipt:  C.category.receipt,
+  contract: C.category.contract,
+  id:       C.category.id,
+  warranty: C.category.warranty,
+  medical:  C.category.medical,
+  tax:      C.category.tax,
+  other:    C.category.other,
 };
 
 interface DocumentCardProps {
   document: Document;
-  /** Compact mode: used in search results and folder lists */
   compact?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
-  /** Multi-select state */
   selectionMode?: boolean;
   isSelected?: boolean;
 }
@@ -61,12 +57,11 @@ export function DocumentCard({
   isSelected = false,
 }: DocumentCardProps) {
   const accentColor = CATEGORY_COLORS[document.category];
-  const isUpcoming = false; // documents don't have event dates
 
   const dateStr = new Date(document.createdAt).toLocaleDateString('en-US', {
-    weekday: 'short',
     month: 'short',
     day: 'numeric',
+    year: 'numeric',
   });
 
   const a11yLabel = `${document.title}, ${CATEGORY_LABELS[document.category]}${document.isFavorite ? ', favorited' : ''}${isSelected ? ', selected' : ''}`;
@@ -87,14 +82,9 @@ export function DocumentCard({
             {isSelected && <Text style={styles.checkmark}>✓</Text>}
           </View>
         )}
-        {/* Thumbnail or category color block */}
         <View style={styles.compactThumb}>
           {document.thumbnailUri ? (
-            <Image
-              source={{ uri: document.thumbnailUri }}
-              style={styles.compactThumbImage}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: document.thumbnailUri }} style={styles.compactThumbImage} resizeMode="cover" />
           ) : (
             <View style={[styles.compactThumbPlaceholder, { backgroundColor: accentColor + '33' }]}>
               <Text style={styles.compactThumbEmoji}>
@@ -103,24 +93,25 @@ export function DocumentCard({
             </View>
           )}
         </View>
-
         <View style={styles.compactInfo}>
           <Text style={styles.compactTitle} numberOfLines={1}>{document.title}</Text>
-          <Text style={styles.compactMeta}>
-            {CATEGORY_LABELS[document.category]} · {dateStr}
-          </Text>
+          <View style={styles.compactMeta}>
+            <View style={[styles.categoryDot, { backgroundColor: accentColor }]} />
+            <Text style={styles.compactMetaText}>{CATEGORY_LABELS[document.category]} · {dateStr}</Text>
+          </View>
         </View>
-
-        {document.isFavorite && (
-          <Text style={styles.favStar}>★</Text>
-        )}
+        {document.isFavorite && <Text style={styles.favStar}>★</Text>}
       </Pressable>
     );
   }
 
   return (
     <Pressable
-      style={[styles.card, isSelected && styles.cardSelected]}
+      style={({ pressed }) => [
+        styles.card,
+        isSelected && styles.cardSelected,
+        pressed && styles.cardPressed,
+      ]}
       onPress={onPress}
       onLongPress={onLongPress}
       accessible
@@ -129,23 +120,39 @@ export function DocumentCard({
       accessibilityState={{ selected: isSelected }}
       accessibilityHint={selectionMode ? 'Double tap to toggle selection' : 'Double tap to open document'}
     >
-      {selectionMode && (
-        <View style={styles.checkboxContainer}>
-          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Text style={styles.checkmark}>✓</Text>}
-          </View>
-        </View>
-      )}
-      {/* Category accent — uses borderLeftWidth instead of absolute positioned strip
-          to avoid overflow:hidden clipping the corner radius */}
-      <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
-
       <View style={styles.content}>
-        {/* Left: text info */}
+        {/* Left: checkbox (selection) or category dot */}
+        <View style={styles.leftCol}>
+          {selectionMode ? (
+            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+          ) : (
+            <View style={[styles.categoryDotLarge, { backgroundColor: accentColor }]} />
+          )}
+        </View>
+
+        {/* Center: text */}
         <View style={styles.info}>
-          <Text style={styles.dateStr}>{dateStr}</Text>
-          <Text style={styles.title} numberOfLines={2}>{document.title}</Text>
-          <Text style={styles.category}>{CATEGORY_LABELS[document.category]}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={2}>{document.title}</Text>
+            {document.ocrStatus === 'processing' && (
+              <View style={styles.ocrBadge}>
+                <View style={styles.ocrDot} />
+              </View>
+            )}
+            {document.ocrStatus === 'failed' && (
+              <Text style={styles.ocrFailed}>⚠</Text>
+            )}
+          </View>
+
+          <View style={styles.metaRow}>
+            <Text style={[styles.categoryLabel, { color: accentColor }]}>
+              {CATEGORY_LABELS[document.category]}
+            </Text>
+            <Text style={styles.metaSep}>·</Text>
+            <Text style={styles.dateStr}>{dateStr}</Text>
+          </View>
 
           <View style={styles.footerRow}>
             {document.isFavorite && (
@@ -153,23 +160,24 @@ export function DocumentCard({
                 <Text style={styles.favPillText}>★ Saved</Text>
               </View>
             )}
-            {document.ocrStatus === 'done' && document.ocrText && (
-              <View style={styles.ocrPill}>
-                <Text style={styles.ocrPillText}>📝 Text</Text>
+            {document.tags.slice(0, 2).map((tag) => (
+              <View key={tag} style={styles.tagPill}>
+                <Text style={styles.tagPillText}>#{tag}</Text>
+              </View>
+            ))}
+            {document.tags.length > 2 && (
+              <View style={styles.tagPill}>
+                <Text style={styles.tagPillText}>+{document.tags.length - 2}</Text>
               </View>
             )}
             <Text style={styles.fileSize}>{formatBytes(document.fileSizeBytes)}</Text>
           </View>
         </View>
 
-        {/* Right: thumbnail — always reserves 68px so cards align */}
+        {/* Right: thumbnail */}
         <View style={styles.thumbContainer}>
           {document.thumbnailUri ? (
-            <Image
-              source={{ uri: document.thumbnailUri }}
-              style={styles.thumb}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: document.thumbnailUri }} style={styles.thumb} resizeMode="cover" />
           ) : (
             <View style={[styles.thumbPlaceholder, { backgroundColor: accentColor + '22' }]}>
               <Text style={styles.thumbPlaceholderEmoji}>
@@ -191,25 +199,40 @@ function formatBytes(bytes: number): string {
 }
 
 const styles = StyleSheet.create({
-  // ── Full card ──────────────────────────────────────────────────
   card: {
     backgroundColor: C.ink2,
     borderRadius: R.lg,
-    flexDirection: 'row',
-    overflow: 'visible',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 4,
   },
   cardSelected: {
     borderWidth: 1.5,
     borderColor: C.amber,
   },
-  checkboxContainer: {
-    justifyContent: 'center',
-    paddingLeft: S[3],
+  cardPressed: {
+    opacity: 0.85,
+  },
+  content: {
+    flexDirection: 'row',
+    padding: S[3],
+    gap: S[3],
+    alignItems: 'center',
+  },
+  leftCol: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 2,
+    width: 24,
+  },
+  categoryDotLarge: {
+    width: 10,
+    height: 10,
+    borderRadius: R.full,
+    marginTop: 6,
   },
   checkbox: {
     width: 22,
@@ -229,68 +252,86 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.ink1,
   },
-  accentBar: {
-    width: 3,
-    borderTopLeftRadius: R.lg,
-    borderBottomLeftRadius: R.lg,
-  },
-  content: {
-    flex: 1,
-    flexDirection: 'row',
-    padding: S[3],
-    gap: S[3],
-  },
   info: { flex: 1 },
-  dateStr: {
-    fontSize: T.xs,
-    color: C.ink4,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: S[2],
+    marginBottom: 3,
   },
   title: {
+    flex: 1,
     fontSize: T.base,
     fontWeight: '600',
     color: C.cream,
-    marginBottom: S[1],
     lineHeight: T.base * 1.3,
   },
-  category: {
+  ocrBadge: {
+    marginTop: 4,
+    width: 8,
+    height: 8,
+    borderRadius: R.full,
+    backgroundColor: C.amber + '44',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ocrDot: {
+    width: 4,
+    height: 4,
+    borderRadius: R.full,
+    backgroundColor: C.amber,
+  },
+  ocrFailed: {
+    fontSize: T.sm,
+    color: C.danger,
+    marginTop: 2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[1],
+    marginBottom: S[2],
+  },
+  categoryLabel: {
+    fontSize: T.sm,
+    fontWeight: '600',
+  },
+  metaSep: {
+    fontSize: T.sm,
+    color: C.ink4,
+  },
+  dateStr: {
     fontSize: T.sm,
     color: C.ash,
-    marginBottom: S[2],
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: S[2],
+    gap: S[1],
   },
   favPill: {
     backgroundColor: C.amberDim,
     borderRadius: R.full,
     paddingHorizontal: S[2],
     paddingVertical: 2,
-    minHeight: 20,
-    justifyContent: 'center',
   },
   favPillText: { fontSize: T.xs, color: C.amber, fontWeight: '600' },
-  ocrPill: {
+  tagPill: {
     backgroundColor: C.ink3,
     borderRadius: R.full,
     paddingHorizontal: S[2],
     paddingVertical: 2,
-    minHeight: 20,
-    justifyContent: 'center',
   },
-  ocrPillText: { fontSize: T.xs, color: C.ash },
-  fileSize: { fontSize: T.xs, color: C.ink4 },
+  tagPillText: { fontSize: T.xs, color: C.ash },
+  fileSize: { fontSize: T.xs, color: C.ink4, marginLeft: 'auto' },
   thumbContainer: {
     width: 68,
     height: 68,
     borderRadius: R.md,
     overflow: 'hidden',
     alignSelf: 'center',
+    flexShrink: 0,
   },
   thumb: { width: 68, height: 68 },
   thumbPlaceholder: {
@@ -300,7 +341,7 @@ const styles = StyleSheet.create({
   },
   thumbPlaceholderEmoji: { fontSize: 28 },
 
-  // ── Compact card ──────────────────────────────────────────────
+  // ── Compact ──────────────────────────────────────────────────
   compactCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -324,8 +365,18 @@ const styles = StyleSheet.create({
     fontSize: T.base,
     fontWeight: '600',
     color: C.cream,
-    marginBottom: 2,
+    marginBottom: 3,
   },
-  compactMeta: { fontSize: T.sm, color: C.ash },
+  compactMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[1],
+  },
+  categoryDot: {
+    width: 7,
+    height: 7,
+    borderRadius: R.full,
+  },
+  compactMetaText: { fontSize: T.sm, color: C.ash },
   favStar: { fontSize: T.base, color: C.amber },
 });

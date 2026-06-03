@@ -312,7 +312,7 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
             hitSlop={6}
           >
             <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-              {c.label}
+              {isActive && c.key !== undefined ? '✓ ' : ''}{c.label}
             </Text>
           </Pressable>
         );
@@ -328,7 +328,7 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
         hitSlop={6}
       >
         <Text style={[styles.chipText, favoriteActive && styles.chipTextActive]}>
-          ★ Favorites
+          {favoriteActive ? '★ Favorites ×' : '☆ Favorites'}
         </Text>
       </Pressable>
 
@@ -343,7 +343,7 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
             hitSlop={6}
           >
             <Text style={[styles.chipText, isActive && styles.chipTagTextActive]}>
-              #{tag}
+              {isActive ? `#${tag} ×` : `#${tag}`}
             </Text>
           </Pressable>
         );
@@ -392,21 +392,31 @@ const styles = StyleSheet.create({
   },
   chip: {
     paddingHorizontal: Spacing['3'],
-    paddingVertical:   Spacing['1'] + 2,
+    paddingVertical:   Spacing['2'],
     borderRadius:      99,
     backgroundColor:   Colors.surfaceOffset,
     borderWidth:       1,
     borderColor:       Colors.border,
-    minHeight:         32,
+    minHeight:         36,
     justifyContent:    'center',
   },
   chipActive: {
     backgroundColor: Colors.primaryHighlight,
     borderColor:     Colors.primary,
+    shadowColor:     Colors.primary,
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.25,
+    shadowRadius:    6,
+    elevation:       4,
   },
   chipTagActive: {
     backgroundColor: C.amberDim,
     borderColor:     C.amber,
+    shadowColor:     C.amber,
+    shadowOffset:    { width: 0, height: 2 },
+    shadowOpacity:   0.2,
+    shadowRadius:    6,
+    elevation:       4,
   },
   chipText: {
     fontSize:   Typography.sm,
@@ -415,9 +425,9 @@ const styles = StyleSheet.create({
   },
   chipTextActive: { color: Colors.primary },
   chipTagTextActive: { color: C.amber },
-  list:      { paddingHorizontal: Spacing['4'], paddingBottom: 120 },
+  list:      { paddingHorizontal: Spacing['4'], paddingBottom: 160 },
   listEmpty: { flex: 1, justifyContent: 'center' },
-  listBulk:  { paddingBottom: 160 },
+  listBulk:  { paddingBottom: 200 },
   sep: {
     height: Spacing['2'],
   },

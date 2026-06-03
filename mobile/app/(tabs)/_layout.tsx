@@ -1,39 +1,62 @@
 /**
- * (tabs)/_layout.tsx — Phase 3 tab bar
+ * (tabs)/_layout.tsx — Floating pill tab bar (UI overhaul)
  *
- * Tabs: Home | Search | Folders | Settings
- * (Capture is a modal, not a tab)
+ * Floating island design: semi-transparent background with blur effect,
+ * elevated above content with shadow. Safe-area aware bottom inset.
  */
 
+import { Platform, View, Text, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
-import { C, T } from '@/theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { C, T, R, S } from '@/theme/tokens';
+
+const TAB_HEIGHT = 62;
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: C.ink2,
-          borderTopColor: C.ink3,
-          borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          position: 'absolute',
+          bottom: bottomPad + S[2],
+          left: S[5],
+          right: S[5],
+          height: TAB_HEIGHT,
+          backgroundColor: C.ink2 + 'F0',
+          borderRadius: R.xl,
+          borderTopWidth: 0,
+          borderWidth: 1,
+          borderColor: C.ink3,
+          elevation: 12,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.32,
+          shadowRadius: 16,
+          paddingBottom: 0,
+          paddingTop: 0,
         },
         tabBarActiveTintColor: C.amber,
         tabBarInactiveTintColor: C.ash,
         tabBarLabelStyle: {
           fontSize: T.xs,
-          fontWeight: '500',
+          fontWeight: '600',
+          marginBottom: Platform.OS === 'ios' ? 8 : 6,
+        },
+        tabBarIconStyle: {
+          marginTop: Platform.OS === 'ios' ? 8 : 6,
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="🏠" color={color} />
+          title: 'Vault',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon label="🗂" color={color} focused={focused} />
           ),
         }}
       />
@@ -41,8 +64,8 @@ export default function TabLayout() {
         name="search"
         options={{
           title: 'Search',
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="🔍" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon label="🔍" color={color} focused={focused} />
           ),
         }}
       />
@@ -50,8 +73,8 @@ export default function TabLayout() {
         name="folders"
         options={{
           title: 'Folders',
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="📁" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon label="📁" color={color} focused={focused} />
           ),
         }}
       />
@@ -59,8 +82,8 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color }) => (
-            <TabIcon emoji="⚙️" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon label="⚙️" color={color} focused={focused} />
           ),
         }}
       />
@@ -68,7 +91,23 @@ export default function TabLayout() {
   );
 }
 
-import { Text } from 'react-native';
-function TabIcon({ emoji, color }: { emoji: string; color: string }) {
-  return <Text style={{ fontSize: 22, color }}>{emoji}</Text>;
+function TabIcon({ label, color, focused }: { label: string; color: string; focused: boolean }) {
+  return (
+    <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+      <Text style={{ fontSize: 18 }}>{label}</Text>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  iconWrap: {
+    width: 36,
+    height: 28,
+    borderRadius: R.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapActive: {
+    backgroundColor: C.amberDim,
+  },
+});

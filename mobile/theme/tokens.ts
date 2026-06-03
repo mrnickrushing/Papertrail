@@ -156,6 +156,7 @@ export const T = {
   md:    Typography.md,
   lg:    Typography.lg,
   xl:    Typography.xl,
+  xxl:   Typography.xxl,
   '2xl': Typography.xxl,
   '3xl': Typography.hero,
 } as const;
