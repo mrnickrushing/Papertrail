@@ -501,7 +501,8 @@ const styles = StyleSheet.create({
   },
   retryText: { fontSize: T.xs, color: '#EF4444', fontWeight: '600' },
   emptyState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
+    flex: 1, alignItems: 'center', justifyContent: 'flex-start',
+    paddingTop: S[10],
     paddingHorizontal: S[8], gap: S[3],
   },
   emptyIconWrap: {
