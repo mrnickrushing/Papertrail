@@ -18,6 +18,8 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -247,6 +249,10 @@ export default function FoldersScreen() {
         animationType="slide"
         onRequestClose={() => setShowCreateModal(false)}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <Pressable
           style={styles.modalBackdrop}
           onPress={() => setShowCreateModal(false)}
@@ -310,6 +316,7 @@ export default function FoldersScreen() {
             </Pressable>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
