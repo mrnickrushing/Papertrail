@@ -107,7 +107,7 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        BUNDLE_ID: com.com.papertraill.app
+        BUNDLE_ID: com.papertraill.app
         XCODE_SCHEME: FileTrail
       groups:
         - ios_credentials
@@ -166,7 +166,7 @@ workflows:
       node: 22
       java: 17
       vars:
-        PACKAGE_NAME: com.rushingtechnologies.filetrail
+        PACKAGE_NAME: com.papertraill.app
       groups:
         - google_play_credentials
         - android_signing
