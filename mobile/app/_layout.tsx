@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { AppState, useColorScheme } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -20,7 +20,6 @@ export default function RootLayout() {
   const biometricEnabled = useAppStore(s => s.biometricEnabled);
   const isLocked = useAppStore(s => s.isLocked);
   const setLocked = useAppStore(s => s.setLocked);
-  const hasOnboarded = useAppStore(s => s.hasOnboarded);
   const appStateRef = useRef(AppState.currentState);
 
   // Run once on mount — capture stable refs so the effect doesn't re-run
@@ -35,12 +34,6 @@ export default function RootLayout() {
     void syncWithBackendRef.current().catch(() => undefined);
     track('app_opened');
   }, []);
-
-  useEffect(() => {
-    if (!hasOnboarded) {
-      router.replace('/onboarding');
-    }
-  }, [hasOnboarded]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {

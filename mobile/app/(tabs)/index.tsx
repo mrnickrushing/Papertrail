@@ -12,7 +12,7 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useDocumentStore } from '@/store';
@@ -68,6 +68,7 @@ export default function VaultScreen() {
   const setSortBy = useAppStore(s => s.setSortBy);
   const setSortDir = useAppStore(s => s.setSortDir);
   const setViewMode = useAppStore(s => s.setViewMode);
+  const hasOnboarded = useAppStore(s => s.hasOnboarded);
 
   // ── Filter logic ──────────────────────────────────────────────────────────
 
@@ -189,6 +190,10 @@ export default function VaultScreen() {
     const [first, ...rest] = sets;
     return Array.from(first).filter((tag) => rest.every((s) => s.has(tag)));
   }, [selectedIds, documents]);
+
+  if (!hasOnboarded) {
+    return <Redirect href="/onboarding" />;
+  }
 
   return (
     <View style={styles.container}>
