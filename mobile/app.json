@@ -2,7 +2,7 @@
   "expo": {
     "name": "FileTrail",
     "slug": "filetrail",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.papertraill.app",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "infoPlist": {
         "NSCameraUsageDescription": "FileTrail uses your camera to scan documents.",
         "NSPhotoLibraryUsageDescription": "FileTrail accesses your photos to import documents.",
@@ -43,20 +43,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-sqlite",
       "expo-local-authentication",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "FileTrail uses your camera to scan documents.",
-          "recordAudioAndroid": false
-        }
-      ],
       [
         "expo-image-picker",
         {
           "cameraPermission": "FileTrail uses your camera to scan documents.",
-          "photosPermission": "FileTrail accesses your photos to import documents."
+          "photosPermission": "FileTrail accesses your photos to import documents.",
+          "microphonePermission": false
         }
       ]
     ],
