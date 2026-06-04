@@ -2,7 +2,7 @@
   "expo": {
     "name": "FileTrail",
     "slug": "filetrail",
-    "version": "1.0.9",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.papertraill.app",
-      "buildNumber": "9",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "FileTrail uses your camera to scan documents.",
         "NSPhotoLibraryUsageDescription": "FileTrail accesses your photos to import documents.",
