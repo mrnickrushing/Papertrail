@@ -109,6 +109,8 @@ workflows:
       vars:
         BUNDLE_ID: com.papertraill.app
         XCODE_SCHEME: FileTrail
+      groups:
+        - ios_credentials
     scripts:
       - name: Install dependencies
         script: |
@@ -116,6 +118,11 @@ workflows:
           npm ci
       - name: Set up keychain
         script: keychain initialize
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
       - name: Add certs to keychain
         script: keychain add-certificates
       - name: Prebuild iOS
@@ -139,6 +146,11 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
     publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
       email:
         recipients:
           - mrnickrushing@gmail.com
