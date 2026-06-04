@@ -52,7 +52,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      "react-native-purchases"
     ],
     "scheme": "filetrail",
     "experiments": {
