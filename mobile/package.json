@@ -15,9 +15,7 @@
     "build:prod": "eas build --profile production --platform all"
   },
   "dependencies": {
-    "@config-plugins/react-native-blob-util": "^10.0.0",
-    "@config-plugins/react-native-pdf": "^10.0.0",
-    "@react-native-async-storage/async-storage": "1.23.1",
+"@react-native-async-storage/async-storage": "1.23.1",
     "@shopify/react-native-skia": "1.5.0",
     "@tanstack/react-query": "^5.0.0",
     "date-fns": "^3.6.0",

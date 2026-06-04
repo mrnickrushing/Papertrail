@@ -49,14 +49,8 @@
           "recordAudioAndroid": false
         }
       ],
-      [
-        "@config-plugins/react-native-pdf",
-        {}
-      ],
-      [
-        "@config-plugins/react-native-blob-util",
-        {}
-      ]
+      "react-native-pdf",
+      "react-native-blob-util"
     ],
     "scheme": "filetrail",
     "experiments": {
