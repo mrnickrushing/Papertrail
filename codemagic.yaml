@@ -133,6 +133,10 @@ workflows:
         script: |
           xcode-project use-profiles \
             --project "$CM_BUILD_DIR/mobile/ios/$XCODE_SCHEME.xcodeproj"
+      - name: Set build number from Codemagic index
+        script: |
+          cd mobile/ios
+          agvtool new-version -all $BUILD_NUMBER
       - name: Build and sign IPA
         script: |
           xcode-project build-ipa \
