@@ -148,6 +148,14 @@ export default function DocumentViewerScreen() {
   useEffect(() => {
     isEditingTitleRef.current = isEditingTitle;
   }, [isEditingTitle]);
+
+  // Keep editTitle in sync if document is renamed externally (e.g. AI Organize)
+  // while the title input is not focused.
+  useEffect(() => {
+    if (!isEditingTitle && document?.title) {
+      setEditTitle(document.title);
+    }
+  }, [document?.title, isEditingTitle]);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -204,7 +212,7 @@ export default function DocumentViewerScreen() {
     } catch (err: unknown) {
       Alert.alert('Share Failed', errorMessage(err, 'Could not share this document.'));
     } finally {
-      setIsSharing(false);
+      if (isMounted.current) setIsSharing(false);
     }
   }, [document, isSharing]);
 
@@ -221,6 +229,7 @@ export default function DocumentViewerScreen() {
           onPress: async () => {
             setIsDeleting(true);
             await deleteDocument(document.id);
+            if (isMounted.current) setIsDeleting(false);
             router.replace('/(tabs)/');
           },
         },

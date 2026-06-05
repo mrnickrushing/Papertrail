@@ -50,6 +50,7 @@ export const useProStore = create<ProState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         hasAdminAccess: state.hasAdminAccess,
+        isPro: state.isPro,
       }),
     },
   ),

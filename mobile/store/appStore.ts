@@ -107,6 +107,11 @@ export const useAppStore = create<AppState>()(
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
+        // Lock on cold start if biometric is enabled so the LockScreen
+        // shows immediately rather than only after a background→foreground cycle.
+        if (state?.biometricEnabled) {
+          state.setLocked(true);
+        }
       },
     }
   )

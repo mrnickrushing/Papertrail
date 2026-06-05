@@ -17,7 +17,7 @@ import Purchases, {
 const RC_API_KEY_IOS =
   process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? 'appl_irsrRjnQozQoLjXSSQKdXKfgTQN';
 const PRO_PRODUCT_ID = 'FileTrail.monthly';
-const PRO_ENTITLEMENT_ID = 'Pro';
+const PRO_ENTITLEMENT_ID = 'pro';
 
 let isConfigured = false;
 
