@@ -337,7 +337,7 @@ export default function Home() {
           <div className={styles.footerLinks}>
             <a href="/privacy">Privacy Policy</a>
             <a href="/terms">Terms of Service</a>
-            <a href="mailto:support@rushingtechnologies.com">Support</a>
+            <a href="/support">Support</a>
           </div>
           <p className={styles.footerCopy}>© {new Date().getFullYear()} FileTrail. Your documents, your device.</p>
         </div>
