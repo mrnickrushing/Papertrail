@@ -138,7 +138,7 @@ export default function RootLayout() {
           >
             <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
             <Stack.Screen name="capture" options={{ headerShown: false, presentation: 'transparentModal' }} />
-            <Stack.Screen name="viewer/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="viewer" options={{ headerShown: false }} />
             <Stack.Screen name="document/[id]" options={{ title: 'Document', headerBackTitle: 'Back' }} />
             <Stack.Screen name="folder/[id]" options={{ title: 'Folder', headerBackTitle: 'Back' }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false, animation: 'none' }} />
