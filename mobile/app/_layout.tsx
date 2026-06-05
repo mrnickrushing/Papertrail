@@ -90,7 +90,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!hasHydrated) return;
-    SplashScreen.hideAsync();
+    // Defer hide by one frame so the navigation redirect commits before the
+    // splash disappears, preventing a flash of the tabs screen on cold start.
+    requestAnimationFrame(() => { void SplashScreen.hideAsync(); });
   }, [hasHydrated]);
 
   useEffect(() => {
