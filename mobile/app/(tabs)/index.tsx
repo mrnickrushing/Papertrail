@@ -375,14 +375,16 @@ export default function VaultScreen() {
       )}
 
       {/* Tag editor modal */}
-      <TagEditor
-        visible={showTagEditor}
-        initialTags={bulkInitialTags}
-        allTags={allTags}
-        title={`Tag ${selectedIds.size} document${selectedIds.size !== 1 ? 's' : ''}`}
-        onConfirm={handleBulkTag}
-        onCancel={() => setShowTagEditor(false)}
-      />
+      {showTagEditor && (
+        <TagEditor
+          visible={showTagEditor}
+          initialTags={bulkInitialTags}
+          allTags={allTags}
+          title={`Tag ${selectedIds.size} document${selectedIds.size !== 1 ? 's' : ''}`}
+          onConfirm={handleBulkTag}
+          onCancel={() => setShowTagEditor(false)}
+        />
+      )}
 
       {/* Folder picker modal */}
       <FolderPickerModal

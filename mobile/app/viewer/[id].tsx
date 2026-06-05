@@ -539,16 +539,18 @@ export default function DocumentViewerScreen() {
       </ScrollView>
 
       {/* ── Tag Editor ── */}
-      <TagEditor
-        visible={showTagEditor}
-        initialTags={document.tags}
-        allTags={allDocumentTags}
-        onConfirm={(tags) => {
-          updateDocumentTags(document.id, tags);
-          setShowTagEditor(false);
-        }}
-        onCancel={() => setShowTagEditor(false)}
-      />
+      {showTagEditor && (
+        <TagEditor
+          visible={showTagEditor}
+          initialTags={document.tags}
+          allTags={allDocumentTags}
+          onConfirm={(tags) => {
+            updateDocumentTags(document.id, tags);
+            setShowTagEditor(false);
+          }}
+          onCancel={() => setShowTagEditor(false)}
+        />
+      )}
 
       <FolderPickerModal
         visible={showFolderPicker}
@@ -567,45 +569,47 @@ export default function DocumentViewerScreen() {
       />
 
       {/* ── Category Picker Modal ── */}
-      <Modal
-        visible={showCategoryPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCategoryPicker(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setShowCategoryPicker(false)}
+      {showCategoryPicker && (
+        <Modal
+          visible={showCategoryPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowCategoryPicker(false)}
         >
           <Pressable
-            style={[styles.categorySheet, { paddingBottom: insets.bottom + S[4] }]}
-            onPress={() => {}}
+            style={styles.modalBackdrop}
+            onPress={() => setShowCategoryPicker(false)}
           >
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Change Category</Text>
-            {CATEGORIES.map(cat => (
-              <Pressable
-                key={cat}
-                style={[
-                  styles.categoryOption,
-                  document.category === cat && styles.categoryOptionSelected,
-                ]}
-                onPress={() => handleCategorySelect(cat)}
-              >
-                <Text style={[
-                  styles.categoryOptionText,
-                  document.category === cat && styles.categoryOptionTextSelected,
-                ]}>
-                  {CATEGORY_LABELS[cat]}
-                </Text>
-                {document.category === cat && (
-                  <Text style={styles.categoryCheck}>✓</Text>
-                )}
-              </Pressable>
-            ))}
+            <Pressable
+              style={[styles.categorySheet, { paddingBottom: insets.bottom + S[4] }]}
+              onPress={() => {}}
+            >
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Change Category</Text>
+              {CATEGORIES.map(cat => (
+                <Pressable
+                  key={cat}
+                  style={[
+                    styles.categoryOption,
+                    document.category === cat && styles.categoryOptionSelected,
+                  ]}
+                  onPress={() => handleCategorySelect(cat)}
+                >
+                  <Text style={[
+                    styles.categoryOptionText,
+                    document.category === cat && styles.categoryOptionTextSelected,
+                  ]}>
+                    {CATEGORY_LABELS[cat]}
+                  </Text>
+                  {document.category === cat && (
+                    <Text style={styles.categoryCheck}>✓</Text>
+                  )}
+                </Pressable>
+              ))}
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
+      )}
 
       {isDeleting && (
         <View style={styles.deletingOverlay}>

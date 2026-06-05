@@ -59,6 +59,8 @@ export function TagEditor({
     (t) => !tags.includes(t) && (input === '' || t.includes(input.toLowerCase()))
   ).slice(0, 8);
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <KeyboardAvoidingView
