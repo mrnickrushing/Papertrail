@@ -5,7 +5,7 @@
  * Calls purchasePro() on confirm and restorePurchases() on restore.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -53,6 +53,11 @@ export function PaywallModal({ visible, onClose, onSuccess }: PaywallModalProps)
   const insets = useSafeAreaInsets();
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   const handleUnlock = async () => {
     setIsPurchasing(true);
@@ -67,7 +72,7 @@ export function PaywallModal({ visible, onClose, onSuccess }: PaywallModalProps)
         Alert.alert(billingAlertTitle(result.code), result.message);
       }
     } finally {
-      setIsPurchasing(false);
+      if (isMounted.current) setIsPurchasing(false);
     }
   };
 
@@ -82,7 +87,7 @@ export function PaywallModal({ visible, onClose, onSuccess }: PaywallModalProps)
 
       Alert.alert(billingAlertTitle(result.code), result.message);
     } finally {
-      setIsRestoring(false);
+      if (isMounted.current) setIsRestoring(false);
     }
   };
 
