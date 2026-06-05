@@ -2,7 +2,7 @@
  * purchases.ts — RevenueCat IAP integration
  *
  * Uses react-native-purchases to handle subscriptions via RevenueCat.
- * Product ID: FileTrail.monthly  |  Entitlement: pro
+ * Product ID: FileTrail.monthly  |  Entitlement: Pro
  */
 
 import { Platform } from 'react-native';
@@ -16,7 +16,7 @@ import Purchases, {
 // RevenueCat iOS public SDK key
 const RC_API_KEY_IOS = 'appl_irsrRjnQozQoLjXSSQKdXKfgTQN';
 const PRO_PRODUCT_ID = 'FileTrail.monthly';
-const PRO_ENTITLEMENT_ID = 'pro';
+const PRO_ENTITLEMENT_ID = 'Pro';
 
 let isConfigured = false;
 
