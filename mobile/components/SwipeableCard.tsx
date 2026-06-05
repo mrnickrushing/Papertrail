@@ -4,23 +4,25 @@
  * Swipe right → favorite (amber)
  * Swipe left  → delete (danger red)
  *
- * Uses PanResponder + Animated so it works in Expo Go without any
- * additional native modules beyond what's already installed.
+ * Uses react-native-gesture-handler + reanimated so swipe gestures
+ * properly cooperate with GestureHandlerRootView and navigation pan
+ * gestures (no PanResponder vs RNGH conflicts).
  */
 
-import React, { useRef } from 'react';
-import {
-  View,
-  Text,
-  Animated,
-  PanResponder,
-  StyleSheet,
-} from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { C, R, S, T } from '@/theme/tokens';
 
-const ACTION_THRESHOLD = 72; // px drag needed to trigger action
+const ACTION_THRESHOLD = 72;
 
 interface Props {
   children: React.ReactNode;
@@ -32,78 +34,77 @@ interface Props {
 }
 
 export function SwipeableCard({ children, onDelete, onFavorite, isFavorite, disabled }: Props) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const hasFiredRef = useRef(false);
+  const translateX = useSharedValue(0);
+  const hasFired = useSharedValue(false);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) =>
-        !disabled && Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+  const hapticLight = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
 
-      onPanResponderMove: (_, g) => {
-        translateX.setValue(g.dx);
-        // Fire haptic once when crossing threshold
-        if (!hasFiredRef.current && Math.abs(g.dx) >= ACTION_THRESHOLD) {
-          hasFiredRef.current = true;
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-        if (hasFiredRef.current && Math.abs(g.dx) < ACTION_THRESHOLD) {
-          hasFiredRef.current = false;
-        }
-      },
-
-      onPanResponderRelease: (_, g) => {
-        hasFiredRef.current = false;
-        if (g.dx > ACTION_THRESHOLD) {
-          translateX.setValue(0);
-          onFavorite();
-        } else if (g.dx < -ACTION_THRESHOLD) {
-          translateX.setValue(0);
-          onDelete();
-        } else {
-          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-        }
-      },
-
-      onPanResponderTerminate: () => {
-        hasFiredRef.current = false;
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-      },
+  const pan = Gesture.Pan()
+    .enabled(!disabled)
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-10, 10])
+    .onUpdate((e) => {
+      translateX.value = e.translationX;
+      if (!hasFired.value && Math.abs(e.translationX) >= ACTION_THRESHOLD) {
+        hasFired.value = true;
+        runOnJS(hapticLight)();
+      }
+      if (hasFired.value && Math.abs(e.translationX) < ACTION_THRESHOLD) {
+        hasFired.value = false;
+      }
     })
-  ).current;
+    .onEnd((e) => {
+      hasFired.value = false;
+      if (e.translationX > ACTION_THRESHOLD) {
+        translateX.value = 0;
+        runOnJS(onFavorite)();
+      } else if (e.translationX < -ACTION_THRESHOLD) {
+        translateX.value = 0;
+        runOnJS(onDelete)();
+      } else {
+        translateX.value = withSpring(0);
+      }
+    })
+    .onFinalize(() => {
+      hasFired.value = false;
+      translateX.value = withSpring(0);
+    });
 
-  // Background reveals
-  const rightBg = translateX.interpolate({
-    inputRange: [0, ACTION_THRESHOLD],
-    outputRange: ['transparent', C.amber + 'CC'],
-    extrapolate: 'clamp',
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const rightBgStyle = useAnimatedStyle(() => {
+    const progress = Math.min(Math.max(translateX.value / ACTION_THRESHOLD, 0), 1);
+    return { opacity: progress };
   });
-  const leftBg = translateX.interpolate({
-    inputRange: [-ACTION_THRESHOLD, 0],
-    outputRange: [C.danger + 'CC', 'transparent'],
-    extrapolate: 'clamp',
+
+  const leftBgStyle = useAnimatedStyle(() => {
+    const progress = Math.min(Math.max(-translateX.value / ACTION_THRESHOLD, 0), 1);
+    return { opacity: progress };
   });
 
   return (
     <View style={styles.container}>
       {/* Left underlay (delete) */}
-      <Animated.View style={[styles.underlay, styles.underlayLeft, { backgroundColor: leftBg }]}>
+      <Animated.View style={[styles.underlay, styles.underlayLeft, leftBgStyle]}>
         <Feather name="trash-2" size={20} color={C.ink1} />
         <Text style={styles.underlayLabel}>Delete</Text>
       </Animated.View>
 
       {/* Right underlay (favorite) */}
-      <Animated.View style={[styles.underlay, styles.underlayRight, { backgroundColor: rightBg }]}>
+      <Animated.View style={[styles.underlay, styles.underlayRight, rightBgStyle]}>
         <Text style={styles.underlayLabel}>{isFavorite ? 'Unfave' : 'Fave'}</Text>
         <Feather name="star" size={20} color={C.ink1} />
       </Animated.View>
 
-      <Animated.View
-        style={{ transform: [{ translateX }] }}
-        {...(disabled ? {} : panResponder.panHandlers)}
-      >
-        {children}
-      </Animated.View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={animatedStyle}>
+          {children}
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -123,9 +124,11 @@ const styles = StyleSheet.create({
   },
   underlayLeft: {
     justifyContent: 'flex-end',
+    backgroundColor: C.danger + 'CC',
   },
   underlayRight: {
     justifyContent: 'flex-start',
+    backgroundColor: C.amber + 'CC',
   },
   underlayLabel: {
     fontSize: T.sm,
