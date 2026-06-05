@@ -1,8 +1,6 @@
-declare const process: { env?: Record<string, string | undefined> } | undefined;
-
-const ADMIN_BYPASS_CODE = process?.env?.EXPO_PUBLIC_ADMIN_BYPASS_CODE?.trim() || '';
-const ADMIN_EMAIL = process?.env?.EXPO_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase() || '';
-const ADMIN_NAME = process?.env?.EXPO_PUBLIC_ADMIN_NAME?.trim() || '';
+const ADMIN_BYPASS_CODE = (process.env.EXPO_PUBLIC_ADMIN_BYPASS_CODE ?? '').trim();
+const ADMIN_EMAIL = (process.env.EXPO_PUBLIC_ADMIN_EMAIL ?? '').trim().toLowerCase();
+const ADMIN_NAME = (process.env.EXPO_PUBLIC_ADMIN_NAME ?? '').trim();
 
 export function isAdminBypassConfigured(): boolean {
   return ADMIN_BYPASS_CODE.length > 0;
