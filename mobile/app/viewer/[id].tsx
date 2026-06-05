@@ -118,17 +118,23 @@ export default function DocumentViewerScreen() {
   const updateDocument = useDocumentStore(s => s.updateDocument);
   const updateDocumentTags = useDocumentStore(s => s.updateDocumentTags);
   const moveDocumentToFolder = useDocumentStore(s => s.moveDocumentToFolder);
-  const allDocumentTags = useDocumentStore(s => {
-    const tagSet = new Set<string>();
-    for (const doc of s.documents) for (const tag of doc.tags) tagSet.add(tag);
-    return Array.from(tagSet).sort();
-  });
+  // Stable selector: only recomputes when documents array reference changes.
+  // Using getAllTags() avoids a new array ref on every render.
+  const allDocumentTags = useDocumentStore(
+    React.useCallback((s) => {
+      const tagSet = new Set<string>();
+      for (const doc of s.documents) for (const tag of doc.tags) tagSet.add(tag);
+      return Array.from(tagSet).sort();
+    }, []),
+  );
   const deleteDocument = useDocumentStore(s => s.deleteDocument);
   const toggleFavorite = useDocumentStore(s => s.toggleFavorite);
   const isPro = useProStore(s => s.isPro);
   const checkPro = useProStore(s => s.checkPro);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  // Ref so PanResponder can read the live value without stale closure
+  const isEditingTitleRef = useRef(false);
   const [editTitle, setEditTitle] = useState(document?.title ?? '');
   const [showOCR, setShowOCR] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -139,6 +145,9 @@ export default function DocumentViewerScreen() {
     isMounted.current = true;
     return () => { isMounted.current = false; };
   }, []);
+  useEffect(() => {
+    isEditingTitleRef.current = isEditingTitle;
+  }, [isEditingTitle]);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -156,7 +165,7 @@ export default function DocumentViewerScreen() {
   const dismissPan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
-        !isEditingTitle && g.dy > 12 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+        !isEditingTitleRef.current && g.dy > 12 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
       onPanResponderMove: (_, g) => {
         if (g.dy > 0) swipeY.setValue(g.dy);
       },
@@ -183,6 +192,7 @@ export default function DocumentViewerScreen() {
     } else {
       setEditTitle(document.title);
     }
+    isEditingTitleRef.current = false;
     setIsEditingTitle(false);
   }, [document, editTitle, updateDocument]);
 
@@ -407,6 +417,7 @@ export default function DocumentViewerScreen() {
         <View style={styles.metaSection}>
           <Pressable
             onPress={() => {
+              isEditingTitleRef.current = true;
               setIsEditingTitle(true);
               setTimeout(() => titleInputRef.current?.focus(), 50);
             }}
