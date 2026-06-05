@@ -59,6 +59,8 @@ export function PaywallModal({ visible, onClose, onSuccess }: PaywallModalProps)
     return () => { isMounted.current = false; };
   }, []);
 
+  if (!visible) return null;
+
   const handleUnlock = async () => {
     setIsPurchasing(true);
     try {

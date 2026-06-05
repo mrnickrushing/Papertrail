@@ -28,6 +28,8 @@ export function FolderPickerModal({
 }: FolderPickerModalProps) {
   const insets = useSafeAreaInsets();
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={onCancel} />

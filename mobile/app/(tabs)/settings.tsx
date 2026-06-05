@@ -557,14 +557,16 @@ export default function SettingsScreen() {
         </Text>
       </ScrollView>
 
-      <PaywallModal
-        visible={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        onSuccess={() => {
-          setShowPaywall(false);
-          void checkPro();
-        }}
-      />
+      {showPaywall && (
+        <PaywallModal
+          visible={showPaywall}
+          onClose={() => setShowPaywall(false)}
+          onSuccess={() => {
+            setShowPaywall(false);
+            void checkPro();
+          }}
+        />
+      )}
     </View>
   );
 }

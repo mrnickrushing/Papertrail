@@ -387,12 +387,14 @@ export default function VaultScreen() {
       )}
 
       {/* Folder picker modal */}
-      <FolderPickerModal
-        visible={showFolderPicker}
-        folders={folders}
-        onSelect={handleBulkMove}
-        onCancel={() => setShowFolderPicker(false)}
-      />
+      {showFolderPicker && (
+        <FolderPickerModal
+          visible={showFolderPicker}
+          folders={folders}
+          onSelect={handleBulkMove}
+          onCancel={() => setShowFolderPicker(false)}
+        />
+      )}
     </View>
   );
 }

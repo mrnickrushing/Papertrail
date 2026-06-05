@@ -252,14 +252,16 @@ export default function FoldersScreen() {
 
       <FAB onPress={openCreate} />
 
-      <PaywallModal
-        visible={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        onSuccess={() => {
-          setShowPaywall(false);
-          void checkPro();
-        }}
-      />
+      {showPaywall && (
+        <PaywallModal
+          visible={showPaywall}
+          onClose={() => setShowPaywall(false)}
+          onSuccess={() => {
+            setShowPaywall(false);
+            void checkPro();
+          }}
+        />
+      )}
 
       {/* Create / Edit Modal */}
       <Modal

@@ -552,21 +552,25 @@ export default function DocumentViewerScreen() {
         />
       )}
 
-      <FolderPickerModal
-        visible={showFolderPicker}
-        folders={folders}
-        onSelect={handleFolderSelect}
-        onCancel={() => setShowFolderPicker(false)}
-      />
+      {showFolderPicker && (
+        <FolderPickerModal
+          visible={showFolderPicker}
+          folders={folders}
+          onSelect={handleFolderSelect}
+          onCancel={() => setShowFolderPicker(false)}
+        />
+      )}
 
-      <PaywallModal
-        visible={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        onSuccess={() => {
-          setShowPaywall(false);
-          void checkPro();
-        }}
-      />
+      {showPaywall && (
+        <PaywallModal
+          visible={showPaywall}
+          onClose={() => setShowPaywall(false)}
+          onSuccess={() => {
+            setShowPaywall(false);
+            void checkPro();
+          }}
+        />
+      )}
 
       {/* ── Category Picker Modal ── */}
       {showCategoryPicker && (
