@@ -9,7 +9,7 @@
  * Footer: expandable OCR text panel.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -134,6 +134,11 @@ export default function DocumentViewerScreen() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showTagEditor, setShowTagEditor] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -258,7 +263,10 @@ export default function DocumentViewerScreen() {
           ocrText: document.ocrText,
           mimeType: document.mimeType,
         },
+        timeoutMs: 15000,
       });
+
+      if (!isMounted.current) return;
 
       const nextTitle = suggestion.suggestedTitle?.trim() || document.title;
       const nextCategory = suggestion.category || document.category;
@@ -287,11 +295,13 @@ export default function DocumentViewerScreen() {
       const summaryParts = ['updated the name', 'set the category'];
       if (nextTags.length > 0) summaryParts.push('applied tags');
       if (suggestedFolder) summaryParts.push(`moved it to ${suggestedFolder.name}`);
-      setAiSummary(`AI ${summaryParts.join(', ')}.`);
+      if (isMounted.current) setAiSummary(`AI ${summaryParts.join(', ')}.`);
     } catch (err: unknown) {
-      Alert.alert('AI Organize Failed', errorMessage(err, 'Could not analyze this document.'));
+      if (isMounted.current) {
+        Alert.alert('AI Organize Failed', errorMessage(err, 'Could not analyze this document.'));
+      }
     } finally {
-      setIsAiOrganizing(false);
+      if (isMounted.current) setIsAiOrganizing(false);
     }
   }, [
     document,
