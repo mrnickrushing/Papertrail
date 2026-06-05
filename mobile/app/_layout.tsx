@@ -136,13 +136,13 @@ export default function RootLayout() {
               animation:        'slide_from_right',
             }}
           >
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
             <Stack.Screen name="capture" options={{ headerShown: false, presentation: 'transparentModal' }} />
             <Stack.Screen name="viewer/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="document/[id]" options={{ title: 'Document', headerBackTitle: 'Back' }} />
             <Stack.Screen name="folder/[id]" options={{ title: 'Folder', headerBackTitle: 'Back' }} />
-            <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="account" options={{ headerShown: false, gestureEnabled: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false, animation: 'none' }} />
+            <Stack.Screen name="account" options={{ headerShown: false, gestureEnabled: false, animation: 'none' }} />
           </Stack>
         </RootErrorBoundary>
 
