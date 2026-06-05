@@ -67,6 +67,11 @@ export default function AccountScreen() {
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const isMounted = React.useRef(true);
+  React.useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
   const ownerAccessConfigured = isAdminBypassConfigured();
   const adminDefaults = getAdminProfileDefaults();
 
@@ -168,13 +173,17 @@ export default function AccountScreen() {
     completeAccountSetup(newProfile);
 
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    await registerUserWithBackend({
+    const regResult = await registerUserWithBackend({
       id,
       fullName: trimmedName,
       email: normalizedEmail,
       passwordHash: pwHash,
       provider: 'email',
     });
+    // Persist the server-assigned userId so backend sync can reference it later.
+    if (regResult.userId) {
+      completeAccountSetup({ ...newProfile, userId: regResult.userId });
+    }
   }
 
   async function loginWithManualProfile() {
@@ -227,7 +236,7 @@ export default function AccountScreen() {
         await loginWithManualProfile();
       }
     } finally {
-      setBusyAction(null);
+      if (isMounted.current) setBusyAction(null);
     }
   }
 
@@ -351,7 +360,7 @@ export default function AccountScreen() {
         err instanceof Error ? err.message : 'Try again in a moment.',
       );
     } finally {
-      setBusyAction(null);
+      if (isMounted.current) setBusyAction(null);
     }
   }
 
