@@ -74,3 +74,11 @@ export const notificationBroadcastSchema = z.object({
   body: z.string().min(1).max(256),
   filter: z.object({ isPro: z.boolean().optional() }).optional(),
 });
+
+export const aiSuggestSchema = z.object({
+  title: z.string().optional(),
+  filename: z.string().optional(),
+  ocrText: z.string().optional(),
+  mimeType: z.string().optional(),
+  pdfBase64: z.string().optional(),
+});

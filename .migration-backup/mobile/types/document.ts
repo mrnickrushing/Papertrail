@@ -41,6 +41,7 @@ export interface Document {
   isFavorite: boolean;
   folderId: string | null;
   tags: string[];
+  notes?: string;
 
   // Timestamps (ISO strings)
   createdAt: string;

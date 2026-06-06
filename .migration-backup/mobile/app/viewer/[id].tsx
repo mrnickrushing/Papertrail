@@ -117,6 +117,7 @@ export default function DocumentViewerScreen() {
   const updateDocument = useDocumentStore(s => s.updateDocument);
   const updateDocumentTags = useDocumentStore(s => s.updateDocumentTags);
   const moveDocumentToFolder = useDocumentStore(s => s.moveDocumentToFolder);
+  const addFolder = useDocumentStore(s => s.addFolder);
   const allDocuments = useDocumentStore(s => s.documents);
   const allDocumentTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -263,6 +264,8 @@ export default function DocumentViewerScreen() {
         suggestedTitle: string;
         category: DocumentCategory;
         tags: string[];
+        notes: string;
+        suggestedFolderName: string;
         source: string;
       }>('/v1/ai/suggest-document', {
         method: 'POST',
@@ -283,28 +286,45 @@ export default function DocumentViewerScreen() {
       const nextTags = Array.isArray(suggestion.tags)
         ? Array.from(new Set(suggestion.tags.map((tag) => tag.trim()).filter(Boolean)))
         : document.tags;
+      const nextNotes = typeof suggestion.notes === 'string' ? suggestion.notes : undefined;
 
       updateDocument(document.id, {
         title: nextTitle,
         category: nextCategory,
+        ...(nextNotes ? { notes: nextNotes } : {}),
       });
       updateDocumentTags(document.id, nextTags);
 
-      const suggestedFolderId = suggestFolderId(folders, {
-        title: nextTitle,
-        category: nextCategory,
-        tags: nextTags,
-        ocrText: document.ocrText,
-      });
-
-      const suggestedFolder = folders.find((folder) => folder.id === suggestedFolderId) ?? null;
-      if (suggestedFolderId) {
-        moveDocumentToFolder(document.id, suggestedFolderId);
+      // Find or create the suggested folder, then move the document into it
+      let targetFolder: { id: string; name: string } | null = null;
+      if (suggestion.suggestedFolderName) {
+        const folderNameLower = suggestion.suggestedFolderName.toLowerCase();
+        const existingFolder = folders.find(
+          (f) => f.name.toLowerCase() === folderNameLower,
+        );
+        if (existingFolder) {
+          targetFolder = existingFolder;
+        } else {
+          targetFolder = addFolder(suggestion.suggestedFolderName);
+        }
+        moveDocumentToFolder(document.id, targetFolder.id);
+      } else {
+        const suggestedFolderId = suggestFolderId(folders, {
+          title: nextTitle,
+          category: nextCategory,
+          tags: nextTags,
+          ocrText: document.ocrText,
+        });
+        if (suggestedFolderId) {
+          targetFolder = folders.find((f) => f.id === suggestedFolderId) ?? null;
+          moveDocumentToFolder(document.id, suggestedFolderId);
+        }
       }
 
-      const summaryParts = ['updated the name', 'set the category'];
-      if (nextTags.length > 0) summaryParts.push('applied tags');
-      if (suggestedFolder) summaryParts.push(`moved it to ${suggestedFolder.name}`);
+      const summaryParts: string[] = ['renamed', 'categorized'];
+      if (nextTags.length > 0) summaryParts.push('tagged');
+      if (targetFolder) summaryParts.push(`filed in "${targetFolder.name}"`);
+      if (nextNotes) summaryParts.push('added notes');
       if (isMounted.current) setAiSummary(`AI ${summaryParts.join(', ')}.`);
     } catch (err: unknown) {
       if (isMounted.current) {

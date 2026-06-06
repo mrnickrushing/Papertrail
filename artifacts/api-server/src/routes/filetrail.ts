@@ -2,10 +2,12 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { JsonStore } from '../filetrail/store.js';
 import { hashShareLinkPassword, verifyShareLinkPassword } from '../filetrail/shareLinks.js';
+import { suggestDocument } from '../filetrail/ai.js';
 import {
   syncPullSchema, syncPushSchema, shareLinkCreateSchema,
   emailInboundSchema, analyticsBatchSchema,
   userRegisterSchema, userLoginSchema, notificationBroadcastSchema,
+  aiSuggestSchema,
 } from '../filetrail/schemas.js';
 
 const DATA_DIR = process.env.DATA_DIR ?? './data';
@@ -31,9 +33,21 @@ router.get('/health', (_req, res) => {
 router.get('/config', (_req, res) => {
   res.json({
     apiVersion: 1,
-    features: { aiSuggest: false, cloudSync: true, emailIngest: true, pushNotifications: true },
-    integrations: { openai: Boolean(process.env.OPENAI_API_KEY), stripe: Boolean(process.env.STRIPE_SECRET_KEY) },
+    features: { aiSuggest: true, cloudSync: true, emailIngest: true, pushNotifications: true },
+    integrations: { anthropic: Boolean(process.env.ANTHROPIC_API_KEY), stripe: Boolean(process.env.STRIPE_SECRET_KEY) },
   });
+});
+
+router.post('/ai/suggest-document', async (req, res) => {
+  const body = aiSuggestSchema.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.format() }); return; }
+  try {
+    const result = await suggestDocument(body.data);
+    res.json(result);
+  } catch (err) {
+    console.error('[ai/suggest-document]', err);
+    res.status(500).json({ error: 'AI suggestion failed' });
+  }
 });
 
 router.post('/sync/push', requireApiKey, async (req, res) => {

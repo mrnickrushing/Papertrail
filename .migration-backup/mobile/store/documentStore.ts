@@ -138,6 +138,7 @@ function sanitizeDocument(value: unknown): Document | null {
     isFavorite: value.isFavorite === true,
     folderId: typeof value.folderId === 'string' ? value.folderId : null,
     tags: stringArrayValue(value.tags),
+    notes: typeof value.notes === 'string' ? value.notes : undefined,
     createdAt: dateValue(value.createdAt),
     updatedAt: dateValue(value.updatedAt),
   };

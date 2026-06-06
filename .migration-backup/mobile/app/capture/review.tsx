@@ -75,6 +75,9 @@ export default function DocumentReviewScreen() {
   }>();
 
   const addDocument = useDocumentStore(s => s.addDocument);
+  const addFolder = useDocumentStore(s => s.addFolder);
+  const moveDocumentToFolder = useDocumentStore(s => s.moveDocumentToFolder);
+  const folders = useDocumentStore(s => s.folders);
   const documents = useDocumentStore(s => s.documents);
   const autoOcr = useAppStore(s => s.autoOcr);
   const isPro = useProStore(s => s.isPro);
@@ -85,6 +88,8 @@ export default function DocumentReviewScreen() {
   const [title, setTitle] = useState(() => generateTitle(params.source, params.mimeType));
   const [category, setCategory] = useState<DocumentCategory>('other');
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+  const [suggestedNotes, setSuggestedNotes] = useState<string>('');
+  const [suggestedFolderName, setSuggestedFolderName] = useState<string>('');
   const [ocrText, setOCRText] = useState<string | null>(null);
   const [ocrStatus, setOCRStatus] = useState<'idle' | 'processing' | 'done' | 'unavailable'>('idle');
   const [aiStatus, setAiStatus] = useState<'idle' | 'processing' | 'done'>('idle');
@@ -121,6 +126,8 @@ export default function DocumentReviewScreen() {
           suggestedTitle: string;
           category: DocumentCategory;
           tags: string[];
+          notes: string;
+          suggestedFolderName: string;
           source: string;
         }>('/v1/ai/suggest-document', {
           method: 'POST',
@@ -132,6 +139,8 @@ export default function DocumentReviewScreen() {
             if (suggestion.suggestedTitle) setTitle(suggestion.suggestedTitle);
             if (suggestion.category) setCategory(suggestion.category);
             setSuggestedTags(Array.isArray(suggestion.tags) ? suggestion.tags : []);
+            if (suggestion.notes) setSuggestedNotes(suggestion.notes);
+            if (suggestion.suggestedFolderName) setSuggestedFolderName(suggestion.suggestedFolderName);
             setAiStatus('done');
           })
           .catch(() => {
@@ -165,6 +174,8 @@ export default function DocumentReviewScreen() {
               suggestedTitle: string;
               category: DocumentCategory;
               tags: string[];
+              notes: string;
+              suggestedFolderName: string;
               source: string;
             }>('/v1/ai/suggest-document', {
               method: 'POST',
@@ -175,6 +186,8 @@ export default function DocumentReviewScreen() {
             if (suggestion.suggestedTitle) setTitle(suggestion.suggestedTitle);
             if (suggestion.category) setCategory(suggestion.category);
             setSuggestedTags(Array.isArray(suggestion.tags) ? suggestion.tags : []);
+            if (suggestion.notes) setSuggestedNotes(suggestion.notes);
+            if (suggestion.suggestedFolderName) setSuggestedFolderName(suggestion.suggestedFolderName);
             setAiStatus('done');
           } catch {
             logDebug('review image ai failed');
@@ -242,7 +255,16 @@ export default function DocumentReviewScreen() {
         isFavorite: false,
         folderId: null,
         tags: suggestedTags,
+        ...(suggestedNotes ? { notes: suggestedNotes } : {}),
       });
+
+      // 5. Auto-file into suggested folder (find or create)
+      if (suggestedFolderName) {
+        const nameLower = suggestedFolderName.toLowerCase();
+        const existing = folders.find((f) => f.name.toLowerCase() === nameLower);
+        const targetFolder = existing ?? addFolder(suggestedFolderName);
+        moveDocumentToFolder(documentId, targetFolder.id);
+      }
 
       // Navigate explicitly to the new document's viewer.
       // router.dismissAll() from inside the /capture nested stack does NOT remove
