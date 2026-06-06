@@ -1,0 +1,12 @@
+{
+  "name": "papertrail-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:backend": "npm ci --prefix backend",
+    "install:mobile": "npm ci --prefix mobile && node scripts/patch-expo-cli-tar.cjs",
+    "install:admin": "npm ci --prefix web/admin",
+    "install:marketing": "npm ci --prefix web/marketing",
+    "install:all": "npm run install:backend && npm run install:mobile && npm run install:admin && npm run install:marketing"
+  }
+}
