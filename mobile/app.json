@@ -62,6 +62,11 @@
     "scheme": "filetrail",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b2a80367-e836-4bf3-9399-c9aa055294da"
+      }
     }
   }
 }
