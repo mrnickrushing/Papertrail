@@ -90,7 +90,6 @@ export async function checkProEntitlement(): Promise<boolean> {
     const customerInfo = await Purchases.getCustomerInfo();
     return hasProEntitlement(customerInfo);
   } catch (e) {
-    console.warn('[purchases] checkProEntitlement error', e);
     return false;
   }
 }
@@ -119,7 +118,6 @@ export async function purchasePro(): Promise<BillingActionResult> {
       };
     }
 
-    console.warn('[purchases] No package in offerings, falling back to direct product lookup');
 
     const product = await findDirectProduct();
     if (!product) {
@@ -154,7 +152,6 @@ export async function purchasePro(): Promise<BillingActionResult> {
       };
     }
 
-    console.warn('[purchases] purchasePro error', e);
     return {
       ok: false,
       code: 'purchase_failed',
@@ -186,7 +183,6 @@ export async function restorePurchases(): Promise<BillingActionResult> {
       message: 'We could not find a previous Pro purchase to restore.',
     };
   } catch (e) {
-    console.warn('[purchases] restorePurchases error', e);
     return {
       ok: false,
       code: 'restore_failed',
