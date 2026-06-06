@@ -9,10 +9,11 @@ interface BulkActionBarProps {
   onMove: () => void;
   onTag: () => void;
   onDelete: () => void;
+  onAiOrganize?: () => void;
   onCancel: () => void;
 }
 
-export function BulkActionBar({ count, onMove, onTag, onDelete, onCancel }: BulkActionBarProps) {
+export function BulkActionBar({ count, onMove, onTag, onDelete, onAiOrganize, onCancel }: BulkActionBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -26,6 +27,9 @@ export function BulkActionBar({ count, onMove, onTag, onDelete, onCancel }: Bulk
       <View style={styles.actions}>
         <ActionButton label="Move" icon="folder" onPress={onMove} />
         <ActionButton label="Tag" icon="tag" onPress={onTag} />
+        {onAiOrganize && (
+          <ActionButton label="AI Org." icon="cpu" onPress={onAiOrganize} amber />
+        )}
         <ActionButton label="Delete" icon="trash-2" onPress={onDelete} danger />
       </View>
     </View>
@@ -37,19 +41,21 @@ function ActionButton({
   icon,
   onPress,
   danger = false,
+  amber = false,
 }: {
   label: string;
   icon: React.ComponentProps<typeof Feather>['name'];
   onPress: () => void;
   danger?: boolean;
+  amber?: boolean;
 }) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.btn, danger && styles.btnDanger, pressed && styles.btnPressed]}
+      style={({ pressed }) => [styles.btn, danger && styles.btnDanger, amber && styles.btnAmber, pressed && styles.btnPressed]}
       onPress={onPress}
     >
-      <Feather name={icon} size={20} color={danger ? '#EF4444' : C.ash} style={styles.btnIcon} />
-      <Text style={[styles.btnLabel, danger && styles.btnLabelDanger]}>{label}</Text>
+      <Feather name={icon} size={20} color={danger ? '#EF4444' : amber ? C.amber : C.ash} style={styles.btnIcon} />
+      <Text style={[styles.btnLabel, danger && styles.btnLabelDanger, amber && styles.btnLabelAmber]}>{label}</Text>
     </Pressable>
   );
 }
@@ -115,5 +121,11 @@ const styles = StyleSheet.create({
   },
   btnLabelDanger: {
     color: '#EF4444',
+  },
+  btnAmber: {
+    backgroundColor: C.amberDim,
+  },
+  btnLabelAmber: {
+    color: C.amber,
   },
 });
