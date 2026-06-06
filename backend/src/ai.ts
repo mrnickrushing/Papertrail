@@ -26,7 +26,7 @@ const CATEGORY_FOLDER: Record<DocumentCategory, string> = {
   warranty: 'Warranties',
   medical: 'Medical Records',
   tax: 'Tax Documents',
-  other: '',
+  other: 'Other Documents',
 };
 
 type SuggestResult = {
@@ -37,6 +37,11 @@ type SuggestResult = {
   notes?: string;
   source: 'heuristic' | 'claude';
 };
+
+/** Detect auto-generated fallback titles like "PDF Document — Jun 2026". */
+function isFallbackTitle(s: string): boolean {
+  return /^(?:PDF|Scanned|Receipt|Contract|Id|Warranty|Medical|Tax|Other) Document — [A-Z][a-z]+ \d{4}$/.test(s.trim());
+}
 
 /** Detect UUID v4 / hex-hash filenames that carry no semantic meaning. */
 function isUuidLike(s: string): boolean {
@@ -71,7 +76,7 @@ function extractJsonObject(raw: string): string {
 function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: string; mimeType?: string }): SuggestResult {
   const filename = input.filename ? normalizeFilename(input.filename) : '';
   const rawTitle = input.title?.trim() ?? '';
-  const cleanTitle = isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) ? '' : rawTitle;
+  const cleanTitle = (isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) || isFallbackTitle(rawTitle)) ? '' : rawTitle;
   const title = cleanTitle || filename;
 
   const text = `${title}\n${input.ocrText ?? ''}`;
@@ -140,7 +145,7 @@ export async function suggestDocument(input: {
   const hasOcrContent = !!(ocrText && ocrText.length > 20);
   const cleanFilename = input.filename ? normalizeFilename(input.filename) : '';
   const rawTitle = input.title?.trim() ?? '';
-  const cleanTitle = isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) ? '' : rawTitle;
+  const cleanTitle = (isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) || isFallbackTitle(rawTitle)) ? '' : rawTitle;
   const contextLabel = cleanTitle || cleanFilename;
 
   if (!hasOcrContent && !contextLabel) {

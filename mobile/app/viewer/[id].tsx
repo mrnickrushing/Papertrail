@@ -321,11 +321,21 @@ export default function DocumentViewerScreen() {
         }
       }
 
-      const summaryParts: string[] = ['renamed', 'categorized'];
-      if (nextTags.length > 0) summaryParts.push('tagged');
-      if (targetFolder) summaryParts.push(`filed in "${targetFolder.name}"`);
-      if (nextNotes) summaryParts.push('added notes');
-      if (isMounted.current) setAiSummary(`AI ${summaryParts.join(', ')}.`);
+      const summaryParts: string[] = [];
+      if (nextTitle !== document.title) summaryParts.push('renamed');
+      if (nextCategory !== document.category) summaryParts.push('categorized');
+      const sortedCurrentTags = [...document.tags].sort().join('\0');
+      const sortedNextTags = [...nextTags].sort().join('\0');
+      if (sortedCurrentTags !== sortedNextTags) summaryParts.push('tagged');
+      if (targetFolder && targetFolder.id !== document.folderId) summaryParts.push(`filed in "${targetFolder.name}"`);
+      if (nextNotes && nextNotes !== document.notes) summaryParts.push('added notes');
+      if (isMounted.current) {
+        setAiSummary(
+          summaryParts.length > 0
+            ? `AI ${summaryParts.join(', ')}.`
+            : 'Already organized — no changes needed.',
+        );
+      }
     } catch (err: unknown) {
       if (isMounted.current) {
         Alert.alert('AI Organize Failed', errorMessage(err, 'Could not analyze this document.'));
