@@ -43,6 +43,10 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
 
   React.useEffect(() => {
     setDebugScreenState('captureModal', `${visible ? 'visible' : 'hidden'} loading=${isLoading ? '1' : '0'}`);
+    // Clear on unmount so the debug overlay accurately reflects mounted state.
+    // Without this, stale `captureModal: visible` lines linger and falsely
+    // suggest the modal is still up after it has been dismissed.
+    return () => setDebugScreenState('captureModal', null);
   }, [isLoading, setDebugScreenState, visible]);
 
   if (!visible) return null;
