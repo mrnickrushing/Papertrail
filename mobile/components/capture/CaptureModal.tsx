@@ -38,12 +38,6 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
   const { pickFile, pickPhoto, isLoading: pickerLoading } = useDocumentPicker();
   const isLoading = cameraLoading || pickerLoading;
 
-  React.useEffect(() => {
-    // Clear on unmount so the debug overlay accurately reflects mounted state.
-    // Without this, stale `captureModal: visible` lines linger and falsely
-    // suggest the modal is still up after it has been dismissed.
-    return () =>  }, [isLoading, visible]);
-
   if (!visible) return null;
 
   const handleCamera = useCallback(async () => {
@@ -54,6 +48,7 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
         params: { uri: result.uri, source: 'camera' },
       });
     } else if (result.status === 'denied') {
+      // Permission prompt handled by the camera hook.
     } else if (result.status === 'error') {
       Alert.alert('Camera Failed', result.message);
     }
@@ -69,7 +64,7 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
     } else if (result.status === 'error') {
       Alert.alert('Photo Import Failed', result.message);
     }
-  }, [, pickPhoto]);
+  }, [pickPhoto]);
 
   const handleFile = useCallback(async () => {
     const result = await pickFile();
@@ -87,7 +82,7 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
     } else if (result.status === 'error') {
       Alert.alert('File Import Failed', result.message);
     }
-  }, [, pickFile]);
+  }, [pickFile]);
 
   return (
     <Pressable style={styles.backdrop} onPress={() => {

@@ -106,7 +106,7 @@ export default function VaultScreen() {
       AsyncStorage.setItem(NUDGE_KEY, '1');
       Alert.alert(
         'Back Up Your Vault',
-        'You have documents saved. Back them up to Files or iCloud so they're safe if you change devices.',
+        "You have documents saved. Back them up to Files or iCloud so they're safe if you change devices.",
         [
           { text: 'Later', style: 'cancel' },
           {

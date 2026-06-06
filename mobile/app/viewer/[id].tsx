@@ -665,7 +665,7 @@ interface PDFViewerProps {
 }
 
 function PDFViewer({
-  uri, page, totalPages, onPageChange,
+  page, totalPages, onPageChange,
 }: PDFViewerProps) {
   return (
     <View style={pdfStyles.container}>

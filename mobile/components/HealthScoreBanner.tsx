@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, View, Text, StyleSheet } from 'react-native';
+import { Modal, Pressable, View, Text, StyleSheet } from 'react-native';
 import { Colors, T, S, Font, Radius } from '@/theme';
 import { useDocumentStore } from '@/store/documentStore';
 

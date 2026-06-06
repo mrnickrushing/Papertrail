@@ -112,8 +112,6 @@ export async function purchasePro(): Promise<BillingActionResult> {
       if (hasProEntitlement(customerInfo)) {
         return { ok: true };
       }
-    console.warn('[purchases] purchasePro error', e);
-    console.warn('[purchases] No package in offerings, falling back to direct product lookup');
 
       return {
         ok: false,
@@ -121,6 +119,8 @@ export async function purchasePro(): Promise<BillingActionResult> {
         message: `Purchase completed, but the '${PRO_ENTITLEMENT_ID}' entitlement is not active.`,
       };
     }
+
+    console.warn('[purchases] No package in offerings, falling back to direct product lookup');
 
 
     const product = await findDirectProduct();

@@ -99,7 +99,7 @@ export default function DocumentReviewScreen() {
     return () => {
       isMounted.current = false;
     };
-  }, [, params.name, params.source]);
+  }, [params.name, params.source]);
 
 
   // Auto-run OCR then AI suggestions
