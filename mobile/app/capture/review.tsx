@@ -131,7 +131,7 @@ export default function DocumentReviewScreen() {
           source: string;
         }>('/v1/ai/suggest-document', {
           method: 'POST',
-          body: { title: params.name, filename: params.name, mimeType: params.mimeType },
+          body: { title, filename: params.name, mimeType: params.mimeType },
         })
           .then((suggestion) => {
             if (!isMounted.current) return;
@@ -179,7 +179,7 @@ export default function DocumentReviewScreen() {
               source: string;
             }>('/v1/ai/suggest-document', {
               method: 'POST',
-              body: { title: params.name, filename: params.name, ocrText: text, mimeType: params.mimeType },
+              body: { title, filename: params.name, ocrText: text, mimeType: params.mimeType },
             });
             if (!isMounted.current) return;
             logDebug(`review image ai ok ${suggestion.category ?? 'none'}`);

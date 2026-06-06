@@ -38,48 +38,73 @@ type SuggestResult = {
   source: 'heuristic' | 'claude';
 };
 
+/** Detect UUID v4 / hex-hash filenames that carry no semantic meaning. */
+function isUuidLike(s: string): boolean {
+  const stripped = s.trim().replace(/\.[a-z0-9]+$/i, '');
+  if (/^(file_)?[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}$/i.test(stripped)) return true;
+  if (/^[0-9a-f_-]{20,}$/i.test(stripped)) return true;
+  return false;
+}
+
 function normalizeFilename(filename: string): string {
-  return filename
-    .replace(/\.[a-z0-9]+$/i, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const noExt = filename.replace(/\.[a-z0-9]+$/i, '');
+  if (isUuidLike(noExt)) return '';
+  const spaced = noExt.replace(/[_-]+/g, ' ').trim();
+  const titleCased = spaced
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+  return titleCased.slice(0, 60);
 }
 
 function extractJsonObject(raw: string): string {
   const trimmed = raw.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return trimmed;
-  }
-
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
   const firstBrace = trimmed.indexOf('{');
   const lastBrace = trimmed.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     return trimmed.slice(firstBrace, lastBrace + 1);
   }
-
   return trimmed;
 }
 
 function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: string; mimeType?: string }): SuggestResult {
   const filename = input.filename ? normalizeFilename(input.filename) : '';
-  const title = input.title?.trim() || filename;
+  const rawTitle = input.title?.trim() ?? '';
+  const cleanTitle = isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) ? '' : rawTitle;
+  const title = cleanTitle || filename;
+
   const text = `${title}\n${input.ocrText ?? ''}`;
   const category = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'other';
-  const firstLine = input.ocrText?.split('\n').map((l) => l.trim()).find(Boolean);
-  const baseTitle = title || firstLine || (input.mimeType?.includes('pdf') ? 'Document' : 'Scan');
 
-  const tags = new Set<string>();
-  tags.add(category);
-  if (/\b(expire|expires|expiration)\b/i.test(text)) tags.add('expires');
-  if (/\b(total|subtotal|amount)\b/i.test(text)) tags.add('amount');
-  if (input.mimeType?.includes('pdf')) tags.add('pdf');
+  const firstOcrLine = input.ocrText
+    ?.split('\n')
+    .map(l => l.trim())
+    .find(l => l.length >= 4 && !/^[\d\s.,\-/]+$/.test(l) && !isUuidLike(l));
+
+  const now = new Date();
+  const monthYear = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  const typeLabel = category !== 'other'
+    ? `${category.charAt(0).toUpperCase()}${category.slice(1)} Document`
+    : input.mimeType?.includes('pdf') ? 'PDF Document' : 'Scanned Document';
+  const fallbackTitle = `${typeLabel} — ${monthYear}`;
+
+  const baseTitle = title || firstOcrLine || fallbackTitle;
+
+  const tags: string[] = [];
+  if (category !== 'other') tags.push(category);
+  if (/\b(expire|expires|expiration)\b/i.test(text)) tags.push('expires');
+  if (/\b(total|subtotal|amount due)\b/i.test(text)) tags.push('amount');
+  if (/\b(invoice|bill)\b/i.test(text)) tags.push('invoice');
+  if (/\b(statement)\b/i.test(text)) tags.push('statement');
+  if (/\b(renewal|renew)\b/i.test(text)) tags.push('renewal');
+  if (tags.length === 0) tags.push('review');
 
   return {
     suggestedTitle: baseTitle.slice(0, 120),
     suggestedFolderName: CATEGORY_FOLDER[category],
     category,
-    tags: Array.from(tags),
+    tags,
     source: 'heuristic',
   };
 }
@@ -108,27 +133,46 @@ export async function suggestDocument(input: {
     ocrText = await extractPdfText(input.pdfBase64);
   }
 
-  if (!apiKey || !ocrText) {
+  if (!apiKey) {
+    return heuristicSuggest({ ...input, ocrText });
+  }
+
+  const hasOcrContent = !!(ocrText && ocrText.length > 20);
+  const cleanFilename = input.filename ? normalizeFilename(input.filename) : '';
+  const rawTitle = input.title?.trim() ?? '';
+  const cleanTitle = isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) ? '' : rawTitle;
+  const contextLabel = cleanTitle || cleanFilename;
+
+  if (!hasOcrContent && !contextLabel) {
     return heuristicSuggest({ ...input, ocrText });
   }
 
   try {
     const client = new Anthropic({ apiKey });
+
+    const userContent = hasOcrContent
+      ? `Analyse this document text and respond with JSON containing exactly these fields:
+- "title": a concise descriptive title (max 80 chars)
+- "category": one of: receipt, contract, id, warranty, medical, tax, other
+- "tags": array of 2-4 meaningful lowercase keyword tags (not just the category name or file type)
+- "notes": one sentence describing any key detail worth remembering (amount, date, expiry, party name), or omit if nothing stands out
+
+Document text:
+${ocrText!.slice(0, 2000)}`
+      : `Based on this file information, suggest document metadata. Respond with JSON containing exactly these fields:
+- "title": a concise descriptive title (max 80 chars)
+- "category": one of: receipt, contract, id, warranty, medical, tax, other
+- "tags": array of 2-4 meaningful lowercase keyword tags (not just the category name or file type)
+- "notes": one sentence describing any key detail, or omit if nothing stands out
+
+File name: ${contextLabel}
+File type: ${input.mimeType || 'unknown'}`;
+
     const message = await client.messages.create({
       model: DEFAULT_ANTHROPIC_MODEL,
       max_tokens: 256,
       system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
-      messages: [{
-        role: 'user',
-        content: `Analyse this document text and respond with JSON containing exactly these fields:
-- "title": a concise descriptive title (max 80 chars)
-- "category": one of: receipt, contract, id, warranty, medical, tax, other
-- "tags": array of 1-4 lowercase keyword tags
-- "notes": one sentence describing any key detail worth remembering (amount, date, expiry, party name), or omit if nothing stands out
-
-Document text:
-${ocrText.slice(0, 2000)}`,
-      }],
+      messages: [{ role: 'user', content: userContent }],
     });
 
     const raw = message.content[0].type === 'text' ? message.content[0].text : '';
@@ -139,17 +183,16 @@ ${ocrText.slice(0, 2000)}`,
       : 'other';
     const tags: string[] = Array.isArray(parsed.tags)
       ? parsed.tags.filter((t: unknown) => typeof t === 'string').slice(0, 4)
-      : [category];
+      : (category !== 'other' ? [category] : ['review']);
     const suggestedTitle: string = typeof parsed.title === 'string' && parsed.title.trim()
       ? parsed.title.trim().slice(0, 120)
-      : heuristicSuggest(input).suggestedTitle;
-
+      : heuristicSuggest({ ...input, ocrText }).suggestedTitle;
     const notes: string | undefined = typeof parsed.notes === 'string' && parsed.notes.trim()
       ? parsed.notes.trim().slice(0, 300)
       : undefined;
 
     return { suggestedTitle, suggestedFolderName: CATEGORY_FOLDER[category], category, tags, notes, source: 'claude' };
   } catch {
-    return heuristicSuggest(input);
+    return heuristicSuggest({ ...input, ocrText });
   }
 }

@@ -334,6 +334,7 @@ export default function DocumentViewerScreen() {
       if (isMounted.current) setIsAiOrganizing(false);
     }
   }, [
+    addFolder,
     document,
     folders,
     isAiOrganizing,
