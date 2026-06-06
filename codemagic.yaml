@@ -4,7 +4,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
-      node: 22
+      node: 20
     scripts:
       - name: Backend install and verify
         script: |
@@ -39,7 +39,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      node: 22
+      node: 20
       java: 17
       groups:
         - public_env
@@ -67,7 +67,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      node: 22
+      node: 20
       xcode: 16.2
       cocoapods: default
       vars:
@@ -105,7 +105,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      node: 22
+      node: 20
       xcode: 26.0
       cocoapods: default
       vars:
@@ -175,7 +175,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      node: 22
+      node: 20
       java: 17
       vars:
         PACKAGE_NAME: com.papertraill.app
