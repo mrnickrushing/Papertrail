@@ -26,8 +26,12 @@ const CATEGORY_FOLDER: Record<DocumentCategory, string> = {
   warranty: 'Warranties',
   medical: 'Medical Records',
   tax: 'Tax Documents',
-  other: '',
+  other: 'Other Documents',
 };
+
+const SUPPORTED_IMAGE_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+]);
 
 type SuggestResult = {
   suggestedTitle: string;
@@ -37,6 +41,11 @@ type SuggestResult = {
   notes?: string;
   source: 'heuristic' | 'claude';
 };
+
+/** Detect auto-generated fallback titles like "PDF Document — Jun 2026". */
+function isFallbackTitle(s: string): boolean {
+  return /^(?:PDF|Scanned|Receipt|Contract|Id|Warranty|Medical|Tax|Other) Document — [A-Z][a-z]+ \d{4}$/.test(s.trim());
+}
 
 /** Detect UUID v4 / hex-hash filenames that carry no semantic meaning. */
 function isUuidLike(s: string): boolean {
@@ -71,7 +80,7 @@ function extractJsonObject(raw: string): string {
 function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: string; mimeType?: string }): SuggestResult {
   const filename = input.filename ? normalizeFilename(input.filename) : '';
   const rawTitle = input.title?.trim() ?? '';
-  const cleanTitle = isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) ? '' : rawTitle;
+  const cleanTitle = (isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) || isFallbackTitle(rawTitle)) ? '' : rawTitle;
   const title = cleanTitle || filename;
 
   const text = `${title}\n${input.ocrText ?? ''}`;
@@ -109,6 +118,7 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
   };
 }
 
+/** Extract text from a PDF for the heuristic (no-API-key) path only. */
 async function extractPdfText(base64: string): Promise<string> {
   try {
     const buffer = Buffer.from(base64, 'base64');
@@ -119,64 +129,115 @@ async function extractPdfText(base64: string): Promise<string> {
   }
 }
 
+const JSON_SCHEMA_PROMPT = `Analyse this document and respond with JSON containing exactly these fields:
+- "title": a concise descriptive title (max 80 chars)
+- "category": one of: receipt, contract, id, warranty, medical, tax, other
+- "tags": array of 2-4 meaningful lowercase keyword tags (not just the category name or file type)
+- "notes": one sentence describing any key detail worth remembering (amount, date, expiry, party name), or omit if nothing stands out`;
+
 export async function suggestDocument(input: {
   title?: string;
   filename?: string;
   ocrText?: string;
   mimeType?: string;
   pdfBase64?: string;
+  imageBase64?: string;
+  imageMimeType?: string;
 }): Promise<SuggestResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
 
-  let ocrText = input.ocrText?.trim();
-  if (!ocrText && input.pdfBase64) {
-    ocrText = await extractPdfText(input.pdfBase64);
-  }
-
+  // Heuristic path: no API key, so extract PDF text the old way for keyword matching
   if (!apiKey) {
+    let ocrText = input.ocrText?.trim();
+    if (!ocrText && input.pdfBase64) {
+      ocrText = await extractPdfText(input.pdfBase64);
+    }
     return heuristicSuggest({ ...input, ocrText });
   }
 
-  const hasOcrContent = !!(ocrText && ocrText.length > 20);
+  // Claude path: determine what file content we have
+  const hasPdf = !!input.pdfBase64;
+  const hasImage = !!(input.imageBase64 && input.imageMimeType && SUPPORTED_IMAGE_MIMES.has(input.imageMimeType));
+  const ocrText = input.ocrText?.trim();
+  const hasOcr = !!(ocrText && ocrText.length > 20);
+
   const cleanFilename = input.filename ? normalizeFilename(input.filename) : '';
   const rawTitle = input.title?.trim() ?? '';
-  const cleanTitle = isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) ? '' : rawTitle;
+  const cleanTitle = (isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) || isFallbackTitle(rawTitle)) ? '' : rawTitle;
   const contextLabel = cleanTitle || cleanFilename;
 
-  if (!hasOcrContent && !contextLabel) {
+  if (!hasPdf && !hasImage && !hasOcr && !contextLabel) {
     return heuristicSuggest({ ...input, ocrText });
   }
 
   try {
     const client = new Anthropic({ apiKey });
+    let rawText = '';
 
-    const userContent = hasOcrContent
-      ? `Analyse this document text and respond with JSON containing exactly these fields:
-- "title": a concise descriptive title (max 80 chars)
-- "category": one of: receipt, contract, id, warranty, medical, tax, other
-- "tags": array of 2-4 meaningful lowercase keyword tags (not just the category name or file type)
-- "notes": one sentence describing any key detail worth remembering (amount, date, expiry, party name), or omit if nothing stands out
+    if (hasPdf) {
+      // Send the PDF directly — Claude reads it natively without text extraction
+      const response = await (client as any).beta.messages.create({
+        model: DEFAULT_ANTHROPIC_MODEL,
+        max_tokens: 256,
+        betas: ['pdfs-2024-09-25'],
+        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.pdfBase64 } },
+            { type: 'text', text: JSON_SCHEMA_PROMPT },
+          ],
+        }],
+      });
+      rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
-Document text:
-${ocrText!.slice(0, 2000)}`
-      : `Based on this file information, suggest document metadata. Respond with JSON containing exactly these fields:
-- "title": a concise descriptive title (max 80 chars)
-- "category": one of: receipt, contract, id, warranty, medical, tax, other
-- "tags": array of 2-4 meaningful lowercase keyword tags (not just the category name or file type)
-- "notes": one sentence describing any key detail, or omit if nothing stands out
+    } else if (hasImage) {
+      // Send the image directly — Claude reads it with vision
+      const contentBlocks: unknown[] = [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: input.imageMimeType, data: input.imageBase64 },
+        },
+      ];
+      // Include OCR text as supplemental context if available
+      const prompt = hasOcr
+        ? `${JSON_SCHEMA_PROMPT}\n\nOCR-extracted text (use as additional context):\n${ocrText!.slice(0, 1000)}`
+        : JSON_SCHEMA_PROMPT;
+      contentBlocks.push({ type: 'text', text: prompt });
 
-File name: ${contextLabel}
-File type: ${input.mimeType || 'unknown'}`;
+      const response = await client.messages.create({
+        model: DEFAULT_ANTHROPIC_MODEL,
+        max_tokens: 256,
+        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+        messages: [{ role: 'user', content: contentBlocks as Anthropic.MessageParam['content'] }],
+      });
+      rawText = response.content[0].type === 'text' ? response.content[0].text : '';
 
-    const message = await client.messages.create({
-      model: DEFAULT_ANTHROPIC_MODEL,
-      max_tokens: 256,
-      system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
-      messages: [{ role: 'user', content: userContent }],
-    });
+    } else if (hasOcr) {
+      // Text from OCR — no file content available
+      const response = await client.messages.create({
+        model: DEFAULT_ANTHROPIC_MODEL,
+        max_tokens: 256,
+        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+        messages: [{ role: 'user', content: `${JSON_SCHEMA_PROMPT}\n\nDocument text:\n${ocrText!.slice(0, 2000)}` }],
+      });
+      rawText = response.content[0].type === 'text' ? response.content[0].text : '';
 
-    const raw = message.content[0].type === 'text' ? message.content[0].text : '';
-    const parsed = JSON.parse(extractJsonObject(raw));
+    } else {
+      // Filename / MIME type only — no file content and no OCR
+      const response = await client.messages.create({
+        model: DEFAULT_ANTHROPIC_MODEL,
+        max_tokens: 256,
+        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+        messages: [{
+          role: 'user',
+          content: `Based on this file information, suggest document metadata.\n${JSON_SCHEMA_PROMPT}\n\nFile name: ${contextLabel}\nFile type: ${input.mimeType || 'unknown'}`,
+        }],
+      });
+      rawText = response.content[0].type === 'text' ? response.content[0].text : '';
+    }
+
+    const parsed = JSON.parse(extractJsonObject(rawText));
 
     const category: DocumentCategory = VALID_CATEGORIES.includes(parsed.category)
       ? parsed.category
@@ -193,6 +254,6 @@ File type: ${input.mimeType || 'unknown'}`;
 
     return { suggestedTitle, suggestedFolderName: CATEGORY_FOLDER[category], category, tags, notes, source: 'claude' };
   } catch {
-    return heuristicSuggest({ ...input, ocrText });
+    return heuristicSuggest({ ...input, ocrText: input.ocrText?.trim() });
   }
 }

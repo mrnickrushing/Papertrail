@@ -243,20 +243,29 @@ export default function DocumentViewerScreen() {
     setAiSummary(null);
 
     try {
-      const PDF_BASE64_SIZE_LIMIT = 4 * 1024 * 1024;
+      const FILE_SIZE_LIMIT = 4 * 1024 * 1024;
+      const canReadFile = !!document.fileUri && (document.fileSizeBytes ?? 0) <= FILE_SIZE_LIMIT;
+
       let pdfBase64: string | undefined;
-      if (
-        !document.ocrText &&
-        document.mimeType === 'application/pdf' &&
-        document.fileUri &&
-        (document.fileSizeBytes ?? 0) <= PDF_BASE64_SIZE_LIMIT
-      ) {
-        try {
-          pdfBase64 = await FileSystem.readAsStringAsync(document.fileUri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        } catch {
-          // proceed without it
+      let imageBase64: string | undefined;
+
+      if (!document.ocrText && canReadFile) {
+        if (document.mimeType === 'application/pdf') {
+          try {
+            pdfBase64 = await FileSystem.readAsStringAsync(document.fileUri!, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+          } catch {
+            // proceed without it
+          }
+        } else if (document.mimeType.startsWith('image/')) {
+          try {
+            imageBase64 = await FileSystem.readAsStringAsync(document.fileUri!, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+          } catch {
+            // proceed without it
+          }
         }
       }
 
@@ -275,6 +284,8 @@ export default function DocumentViewerScreen() {
           ocrText: document.ocrText,
           mimeType: document.mimeType,
           pdfBase64,
+          imageBase64,
+          imageMimeType: imageBase64 ? document.mimeType : undefined,
         },
         timeoutMs: 30000,
       });
@@ -321,11 +332,21 @@ export default function DocumentViewerScreen() {
         }
       }
 
-      const summaryParts: string[] = ['renamed', 'categorized'];
-      if (nextTags.length > 0) summaryParts.push('tagged');
-      if (targetFolder) summaryParts.push(`filed in "${targetFolder.name}"`);
-      if (nextNotes) summaryParts.push('added notes');
-      if (isMounted.current) setAiSummary(`AI ${summaryParts.join(', ')}.`);
+      const summaryParts: string[] = [];
+      if (nextTitle !== document.title) summaryParts.push('renamed');
+      if (nextCategory !== document.category) summaryParts.push('categorized');
+      const sortedCurrentTags = [...document.tags].sort().join('\0');
+      const sortedNextTags = [...nextTags].sort().join('\0');
+      if (sortedCurrentTags !== sortedNextTags) summaryParts.push('tagged');
+      if (targetFolder && targetFolder.id !== document.folderId) summaryParts.push(`filed in "${targetFolder.name}"`);
+      if (nextNotes && nextNotes !== document.notes) summaryParts.push('added notes');
+      if (isMounted.current) {
+        setAiSummary(
+          summaryParts.length > 0
+            ? `AI ${summaryParts.join(', ')}.`
+            : 'Already organized — no changes needed.',
+        );
+      }
     } catch (err: unknown) {
       if (isMounted.current) {
         Alert.alert('AI Organize Failed', errorMessage(err, 'Could not analyze this document.'));
