@@ -1,0 +1,164 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import type {
+  AnalyticsRecord, AppData, EmailInboundRecord,
+  ShareLinkCreateInput, ShareLinkRecord, ShareLinkStoreRecord,
+  TombstoneRecord, UserRecord, NotificationRecord,
+} from './types.js';
+import { toPublicShareLinkRecord } from './shareLinks.js';
+
+const INITIAL_DATA: AppData = {
+  syncVersion: 0, documents: {}, folders: {}, tombstones: [],
+  shareLinks: {}, inboundEmails: {}, analytics: [], users: {}, notifications: [],
+};
+
+export class JsonStore {
+  private readonly filePath: string;
+  private writeChain = Promise.resolve();
+
+  constructor(dataDir: string) {
+    this.filePath = path.join(dataDir, 'filetrail.json');
+  }
+
+  async init(): Promise<void> {
+    await mkdir(path.dirname(this.filePath), { recursive: true });
+    try { await readFile(this.filePath, 'utf8'); }
+    catch { await this.write({ ...INITIAL_DATA }); }
+  }
+
+  private async readFromDisk(): Promise<AppData> {
+    try {
+      const raw = await readFile(this.filePath, 'utf8');
+      return { ...INITIAL_DATA, ...JSON.parse(raw) } as AppData;
+    } catch { return { ...INITIAL_DATA }; }
+  }
+
+  async read(): Promise<AppData> {
+    await this.writeChain;
+    return this.readFromDisk();
+  }
+
+  async write(data: AppData): Promise<void> {
+    this.writeChain = this.writeChain.then(() =>
+      writeFile(this.filePath, JSON.stringify(data, null, 2), 'utf8')
+    );
+    await this.writeChain;
+  }
+
+  private async mutate<T>(updater: (data: AppData) => T | Promise<T>): Promise<T> {
+    const task = this.writeChain.then(async () => {
+      const data = await this.readFromDisk();
+      const result = await updater(data);
+      await writeFile(this.filePath, JSON.stringify(data, null, 2), 'utf8');
+      return result;
+    });
+    this.writeChain = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  async push(input: { documents: AppData['documents'][string][]; folders: AppData['folders'][string][]; deletedDocumentIds: string[]; deletedFolderIds: string[] }): Promise<{ syncVersion: number }> {
+    return this.mutate((data) => {
+      const nextVersion = () => { data.syncVersion += 1; return data.syncVersion; };
+      const tombstones: TombstoneRecord[] = [];
+      for (const folder of input.folders) data.folders[folder.id] = { ...folder, syncVersion: nextVersion() };
+      for (const document of input.documents) data.documents[document.id] = { ...document, syncVersion: nextVersion() };
+      for (const id of input.deletedDocumentIds) { delete data.documents[id]; tombstones.push({ id, kind: 'document', deletedAt: new Date().toISOString(), syncVersion: nextVersion() }); }
+      for (const id of input.deletedFolderIds) { delete data.folders[id]; tombstones.push({ id, kind: 'folder', deletedAt: new Date().toISOString(), syncVersion: nextVersion() }); }
+      data.tombstones.push(...tombstones);
+      return { syncVersion: data.syncVersion };
+    });
+  }
+
+  async pull(sinceVersion: number) {
+    const data = await this.read();
+    return {
+      syncVersion: data.syncVersion,
+      documents: Object.values(data.documents).filter(i => (i.syncVersion ?? 0) > sinceVersion),
+      folders: Object.values(data.folders).filter(i => (i.syncVersion ?? 0) > sinceVersion),
+      tombstones: data.tombstones.filter(i => i.syncVersion > sinceVersion),
+      serverTime: new Date().toISOString(),
+    };
+  }
+
+  async createShareLink(input: ShareLinkCreateInput): Promise<ShareLinkRecord> {
+    return this.mutate((data) => {
+      const record: ShareLinkStoreRecord = {
+        documentId: input.documentId, title: input.title, expiresAt: input.expiresAt,
+        passwordProtected: Boolean(input.passwordHash), passwordHash: input.passwordHash,
+        token: randomUUID().replace(/-/g, ''), createdAt: new Date().toISOString(),
+      };
+      data.shareLinks[record.token] = record;
+      return toPublicShareLinkRecord(record);
+    });
+  }
+
+  async getShareLink(token: string): Promise<ShareLinkStoreRecord | null> {
+    const data = await this.read();
+    return data.shareLinks[token] ?? null;
+  }
+
+  async listShareLinks(limit = 200): Promise<ShareLinkRecord[]> {
+    const data = await this.read();
+    return Object.values(data.shareLinks)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map(toPublicShareLinkRecord);
+  }
+
+  async addInboundEmail(input: Omit<EmailInboundRecord, 'id' | 'receivedAt'>): Promise<EmailInboundRecord> {
+    return this.mutate((data) => {
+      const record: EmailInboundRecord = { ...input, id: randomUUID(), receivedAt: new Date().toISOString() };
+      data.inboundEmails[record.id] = record;
+      return record;
+    });
+  }
+
+  async getAnalytics(limit = 500): Promise<AnalyticsRecord[]> {
+    const data = await this.read();
+    return data.analytics.slice(-limit).reverse();
+  }
+
+  async addAnalytics(events: Array<Omit<AnalyticsRecord, 'id' | 'createdAt'>>): Promise<number> {
+    return this.mutate((data) => {
+      const records = events.map(e => ({ ...e, id: randomUUID(), createdAt: new Date().toISOString() }));
+      data.analytics.push(...records);
+      data.analytics = data.analytics.slice(-5000);
+      return records.length;
+    });
+  }
+
+  async registerUser(input: Omit<UserRecord, 'isPro' | 'createdAt'>): Promise<UserRecord> {
+    return this.mutate((data) => {
+      const existing = Object.values(data.users).find(u => u.email === input.email);
+      if (existing) return existing;
+      const record: UserRecord = { ...input, isPro: false, createdAt: new Date().toISOString() };
+      data.users[record.id] = record;
+      return record;
+    });
+  }
+
+  async getUserByEmail(email: string): Promise<UserRecord | null> {
+    const data = await this.read();
+    return Object.values(data.users).find(u => u.email === email) ?? null;
+  }
+
+  async listUsers(limit = 500): Promise<UserRecord[]> {
+    const data = await this.read();
+    return Object.values(data.users).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  }
+
+  async addNotification(n: Omit<NotificationRecord, 'id' | 'sentAt'>): Promise<NotificationRecord> {
+    return this.mutate((data) => {
+      const record: NotificationRecord = { ...n, id: randomUUID(), sentAt: new Date().toISOString() };
+      if (!data.notifications) data.notifications = [];
+      data.notifications.push(record);
+      return record;
+    });
+  }
+
+  async listNotifications(limit = 100): Promise<NotificationRecord[]> {
+    const data = await this.read();
+    return (data.notifications ?? []).slice(-limit).reverse();
+  }
+}
