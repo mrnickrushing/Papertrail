@@ -15,7 +15,7 @@ const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
   ['contract', /\b(contract|agreement|signature|party|terms)\b/i],
   ['id', /\b(driver|license|passport|identification|dob)\b/i],
   ['warranty', /\b(warranty|serial|coverage|expires)\b/i],
-  ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx)\b/i],
+  ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx|emergency|urgent care)\b|\bE\.?R\.?\b/i],
   ['tax', /\b(tax|irs|w-?2|1099|deduction|return)\b/i],
 ];
 
@@ -45,9 +45,14 @@ type SuggestResult = {
   source: 'heuristic' | 'claude';
 };
 
-/** Detect auto-generated fallback titles like "PDF Document — Jun 2026". */
+/** Detect auto-generated fallback titles — heuristic format OR generateTitle() format from the mobile app. */
 function isFallbackTitle(s: string): boolean {
-  return /^(?:PDF|Scanned|Receipt|Contract|Id|Warranty|Medical|Tax|Other) Document — [A-Z][a-z]+ \d{4}$/.test(s.trim());
+  const t = s.trim();
+  // Heuristic backend format: "PDF Document — Jun 2026"
+  if (/^(?:PDF|Scanned|Receipt|Contract|Id|Warranty|Medical|Tax|Other) Document — [A-Z][a-z]+ \d{4}$/.test(t)) return true;
+  // Mobile generateTitle() format: "Document Jun 6, 2026" / "Scan Jun 6, 2026" / etc.
+  if (/^(?:Document|Scan|Photo|Import) [A-Z][a-z]+ \d{1,2}, \d{4}$/.test(t)) return true;
+  return false;
 }
 
 /** Detect UUID v4 / hex-hash filenames that carry no semantic meaning. */
@@ -64,7 +69,7 @@ function normalizeFilename(filename: string): string {
   const spaced = noExt.replace(/[_-]+/g, ' ').trim();
   const titleCased = spaced
     .split(' ')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map(w => w === w.toUpperCase() && w.length > 1 ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
   return titleCased.slice(0, 60);
 }
@@ -184,7 +189,7 @@ export async function suggestDocument(input: {
       // Send the PDF directly — Claude reads it natively without text extraction
       const response = await (client as any).beta.messages.create({
         model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 256,
+        max_tokens: 512,
         betas: ['pdfs-2024-09-25'],
         system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
         messages: [{
@@ -213,7 +218,7 @@ export async function suggestDocument(input: {
 
       const response = await client.messages.create({
         model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 256,
+        max_tokens: 512,
         system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
         messages: [{ role: 'user', content: contentBlocks as Anthropic.MessageParam['content'] }],
       });
@@ -223,7 +228,7 @@ export async function suggestDocument(input: {
       // Text from OCR — no file content available
       const response = await client.messages.create({
         model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 256,
+        max_tokens: 512,
         system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
         messages: [{ role: 'user', content: `${JSON_SCHEMA_PROMPT}\n\nDocument text:\n${ocrText!.slice(0, 2000)}` }],
       });
@@ -233,7 +238,7 @@ export async function suggestDocument(input: {
       // Filename / MIME type only — no file content and no OCR
       const response = await client.messages.create({
         model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 256,
+        max_tokens: 512,
         system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
         messages: [{
           role: 'user',
