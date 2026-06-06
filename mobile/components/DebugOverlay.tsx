@@ -18,6 +18,8 @@ export function DebugOverlay({ routeLabel }: DebugOverlayProps) {
   const bumpRootTap = useDebugStore((s) => s.bumpRootTap);
   const clear = useDebugStore((s) => s.clear);
 
+  if (!__DEV__) return null;
+
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <View pointerEvents="box-none" style={styles.anchor}>
