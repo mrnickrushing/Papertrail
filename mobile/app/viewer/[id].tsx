@@ -410,13 +410,22 @@ export default function DocumentViewerScreen() {
         {/* Document preview */}
         <View style={styles.previewCard}>
           {!isPDF ? (
-            <View style={styles.zoomScroll}>
+            <ScrollView
+              style={styles.zoomScroll}
+              contentContainerStyle={styles.zoomScrollContent}
+              maximumZoomScale={4}
+              minimumZoomScale={1}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              bouncesZoom
+              centerContent
+            >
               <Image
                 source={{ uri: document.fileUri }}
                 style={styles.previewImage}
                 resizeMode="contain"
               />
-            </View>
+            </ScrollView>
           ) : (
             <PDFViewer
               uri={document.fileUri}
@@ -824,6 +833,12 @@ const styles = StyleSheet.create({
   zoomScroll: {
     width: '100%',
     height: SCREEN_H * 0.5,
+  },
+  zoomScrollContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '100%',
+    minHeight: SCREEN_H * 0.5,
   },
   previewImage: {
     width: SCREEN_W - S[8],
