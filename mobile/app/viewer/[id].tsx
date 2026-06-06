@@ -292,6 +292,7 @@ export default function DocumentViewerScreen() {
         tags: string[];
         notes: string;
         suggestedFolderName: string;
+        suggestedSubfolderName?: string;
         source: string;
         date?: string;
         vendor?: string;
@@ -336,13 +337,17 @@ export default function DocumentViewerScreen() {
       let targetFolder: { id: string; name: string } | null = null;
       if (suggestion.suggestedFolderName) {
         const folderNameLower = suggestion.suggestedFolderName.toLowerCase();
-        const existingFolder = folders.find(
-          (f) => f.name.toLowerCase() === folderNameLower,
+        const existingParent = folders.find(
+          (f) => f.name.toLowerCase() === folderNameLower && !f.parentId,
         );
-        if (existingFolder) {
-          targetFolder = existingFolder;
-        } else {
-          targetFolder = addFolder(suggestion.suggestedFolderName);
+        const parentFolder = existingParent ?? addFolder(suggestion.suggestedFolderName);
+        targetFolder = parentFolder;
+        if (suggestion.suggestedSubfolderName) {
+          const subLower = suggestion.suggestedSubfolderName.toLowerCase();
+          const freshFolders = useDocumentStore.getState().folders;
+          const subFolder = freshFolders.find((f) => f.name.toLowerCase() === subLower && f.parentId === parentFolder.id)
+            ?? addFolder(suggestion.suggestedSubfolderName, parentFolder.color, parentFolder.id);
+          targetFolder = subFolder;
         }
         moveDocumentToFolder(document.id, targetFolder.id);
       } else {

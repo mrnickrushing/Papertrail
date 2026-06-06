@@ -38,6 +38,7 @@ export const folderSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   color: z.string().min(1),
+  parentId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   syncVersion: z.number().int().nonnegative().optional(),

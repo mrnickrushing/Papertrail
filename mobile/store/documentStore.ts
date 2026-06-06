@@ -68,7 +68,7 @@ interface DocumentState {
   getAllTags: () => string[];
 
   // Folder actions
-  addFolder: (name: string, color?: string) => Folder;
+  addFolder: (name: string, color?: string, parentId?: string | null) => Folder;
   updateFolder: (id: string, patch: Partial<Pick<Folder, 'name' | 'color'>>) => void;
   deleteFolder: (id: string, moveDocumentsToRoot?: boolean) => Promise<void>;
 
@@ -155,6 +155,7 @@ function sanitizeFolder(value: unknown): Folder | null {
     id,
     name: stringValue(value.name, 'Folder'),
     color: stringValue(value.color, Colors.primary),
+    parentId: typeof value.parentId === 'string' ? value.parentId : (value.parentId === null ? null : undefined),
     createdAt,
     updatedAt: dateValue(value.updatedAt ?? createdAt),
   };
@@ -433,9 +434,9 @@ export const useDocumentStore = create<DocumentState>()(
         }));
       },
 
-      addFolder: (name, color = Colors.primary) => {
+      addFolder: (name, color = Colors.primary, parentId?) => {
         const now = nowIso();
-        const folder: Folder = { id: nanoid(), name, color, createdAt: now, updatedAt: now };
+        const folder: Folder = { id: nanoid(), name, color, ...(parentId != null ? { parentId } : {}), createdAt: now, updatedAt: now };
         set((s) => ({ folders: [...s.folders, folder] }));
         return folder;
       },

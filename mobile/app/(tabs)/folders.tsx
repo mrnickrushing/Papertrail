@@ -43,6 +43,7 @@ type ActiveFolder = {
   id: string | null;
   name: string;
   color: string;
+  parentId?: string | null;
 };
 
 export default function FoldersScreen() {
@@ -130,16 +131,29 @@ export default function FoldersScreen() {
 
   // If a folder is open, show its contents
   if (activeFolder) {
+    const isSubfolder = !!activeFolder.parentId;
+    const subfolders = isSubfolder ? [] : folders.filter(f => f.parentId === activeFolder.id);
     const folderDocs = getFolderDocuments(activeFolder.id);
+    const hasContent = subfolders.length > 0 || folderDocs.length > 0;
+
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable
             style={styles.backBtn}
-            onPress={() => setActiveFolder(null)}
+            onPress={() => {
+              if (isSubfolder) {
+                // Go back to parent folder
+                const parent = folders.find(f => f.id === activeFolder.parentId);
+                if (parent) setActiveFolder(parent);
+                else setActiveFolder(null);
+              } else {
+                setActiveFolder(null);
+              }
+            }}
             hitSlop={8}
           >
-            <Text style={styles.backBtnText}>‹ Folders</Text>
+            <Text style={styles.backBtnText}>{isSubfolder ? `‹ ${folders.find(f => f.id === activeFolder.parentId)?.name ?? 'Folders'}` : '‹ Folders'}</Text>
           </Pressable>
           <View style={styles.headerTitleRow}>
             <Text style={[styles.folderDot, { color: activeFolder.color }]}>●</Text>
@@ -148,7 +162,7 @@ export default function FoldersScreen() {
           <View style={{ width: 80 }} />
         </View>
 
-        {folderDocs.length === 0 ? (
+        {!hasContent ? (
           <EmptyState
             icon="folder"
             title={activeFolder.id === null ? 'No unfiled documents' : 'Empty folder'}
@@ -163,6 +177,32 @@ export default function FoldersScreen() {
             data={folderDocs}
             keyExtractor={d => d.id}
             contentContainerStyle={{ padding: S[4], paddingBottom: insets.bottom + 100 }}
+            ListHeaderComponent={subfolders.length > 0 ? (
+              <View style={{ marginBottom: S[4] }}>
+                {subfolders.map(sub => {
+                  const subCount = getFolderDocuments(sub.id).length;
+                  return (
+                    <Pressable
+                      key={sub.id}
+                      style={({ pressed }) => [styles.folderRow, { marginBottom: S[2] }, pressed && { opacity: 0.75 }]}
+                      onPress={() => setActiveFolder({ ...sub, parentId: sub.parentId ?? activeFolder.id })}
+                    >
+                      <View style={[styles.folderIcon, { backgroundColor: sub.color + '22' }]}>
+                        <Feather name="folder" size={24} color={sub.color} />
+                      </View>
+                      <View style={styles.folderInfo}>
+                        <Text style={styles.folderName}>{sub.name}</Text>
+                        <Text style={styles.folderCount}>{subCount} document{subCount === 1 ? '' : 's'}</Text>
+                      </View>
+                      <View style={[styles.countBadge, { backgroundColor: sub.color + '22', borderWidth: 1, borderColor: sub.color + '44' }]}>
+                        <Text style={[styles.countBadgeText, { color: sub.color }]}>{subCount}</Text>
+                      </View>
+                      <Feather name="chevron-right" size={18} color={C.ink4} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: item.id } })}
@@ -224,8 +264,9 @@ export default function FoldersScreen() {
             </Text>
           </View>
         ) : (
-          folders.map(folder => {
-            const count = getFolderDocuments(folder.id).length;
+          folders.filter(f => !f.parentId).map(folder => {
+            const childFolderIds = folders.filter(f => f.parentId === folder.id).map(f => f.id);
+            const count = getFolderDocuments(folder.id).length + childFolderIds.reduce((sum, id) => sum + getFolderDocuments(id).length, 0);
             return (
               <Pressable
                 key={folder.id}

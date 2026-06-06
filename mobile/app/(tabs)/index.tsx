@@ -277,6 +277,7 @@ export default function VaultScreen() {
                   tags: string[];
                   notes: string;
                   suggestedFolderName: string;
+                  suggestedSubfolderName?: string;
                   source?: string;
                   date?: string;
                   vendor?: string;
@@ -316,11 +317,18 @@ export default function VaultScreen() {
                 if (Array.isArray(suggestion.amounts) && suggestion.amounts.length > 0) aiPatch.amounts = suggestion.amounts;
                 updateDocument(docId, aiPatch as any);
                 if (suggestion.suggestedFolderName) {
-                  const existing = folders.find(
-                    f => f.name.toLowerCase() === suggestion.suggestedFolderName.toLowerCase()
-                  );
-                  const folder = existing ?? addFolder(suggestion.suggestedFolderName);
-                  moveDocumentToFolder(docId, folder.id);
+                  const nameLower = suggestion.suggestedFolderName.toLowerCase();
+                  const existingParent = folders.find(f => f.name.toLowerCase() === nameLower && !f.parentId);
+                  const parentFolder = existingParent ?? addFolder(suggestion.suggestedFolderName);
+                  if (suggestion.suggestedSubfolderName) {
+                    const subLower = suggestion.suggestedSubfolderName.toLowerCase();
+                    const freshFolders = useDocumentStore.getState().folders;
+                    const subFolder = freshFolders.find(f => f.name.toLowerCase() === subLower && f.parentId === parentFolder.id)
+                      ?? addFolder(suggestion.suggestedSubfolderName, parentFolder.color, parentFolder.id);
+                    moveDocumentToFolder(docId, subFolder.id);
+                  } else {
+                    moveDocumentToFolder(docId, parentFolder.id);
+                  }
                 }
                 return true;
               } catch {

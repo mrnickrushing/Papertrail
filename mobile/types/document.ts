@@ -54,6 +54,7 @@ export interface Folder {
   id: string;
   name: string;
   color: string; // hex color for folder icon accent
+  parentId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

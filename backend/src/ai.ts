@@ -36,6 +36,7 @@ const SUPPORTED_IMAGE_MIMES = new Set([
 type SuggestResult = {
   suggestedTitle: string;
   suggestedFolderName: string;
+  suggestedSubfolderName?: string;
   category: DocumentCategory;
   tags: string[];
   notes?: string;
@@ -144,7 +145,8 @@ const JSON_SCHEMA_PROMPT = `Analyse this document and respond with JSON containi
 - "notes": one sentence describing any key detail worth remembering (amount, date, expiry, party name), or omit if nothing stands out
 - "date": most relevant date found on the document in YYYY-MM-DD format, or omit if none
 - "vendor": merchant, organization, or issuing party name, or omit if not applicable
-- "amounts": array of numeric monetary values (no currency symbols, e.g. [142.50, 9.99]), or omit if none`;
+- "amounts": array of numeric monetary values (no currency symbols, e.g. [142.50, 9.99]), or omit if none
+- "subfolderName": for medical documents, the patient's full name as it appears on the document, for use as a subfolder name; omit if not a medical document or if no patient name is found`;
 
 export async function suggestDocument(input: {
   title?: string;
@@ -271,8 +273,11 @@ export async function suggestDocument(input: {
     const amounts: number[] | undefined = Array.isArray(parsed.amounts)
       ? parsed.amounts.filter((a: unknown) => typeof a === 'number' && Number.isFinite(a) && a >= 0).slice(0, 10)
       : undefined;
+    const suggestedSubfolderName: string | undefined = typeof parsed.subfolderName === 'string' && parsed.subfolderName.trim()
+      ? parsed.subfolderName.trim().slice(0, 80)
+      : undefined;
 
-    return { suggestedTitle, suggestedFolderName: CATEGORY_FOLDER[category], category, tags, notes, date, vendor, amounts, source: 'claude' };
+    return { suggestedTitle, suggestedFolderName: CATEGORY_FOLDER[category], suggestedSubfolderName, category, tags, notes, date, vendor, amounts, source: 'claude' };
   } catch {
     return heuristicSuggest({ ...input, ocrText: input.ocrText?.trim() });
   }

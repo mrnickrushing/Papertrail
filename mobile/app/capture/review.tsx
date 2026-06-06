@@ -88,6 +88,7 @@ export default function DocumentReviewScreen() {
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [suggestedNotes, setSuggestedNotes] = useState<string>('');
   const [suggestedFolderName, setSuggestedFolderName] = useState<string>('');
+  const [suggestedSubfolderName, setSuggestedSubfolderName] = useState<string>('');
   const [suggestedAiSource, setSuggestedAiSource] = useState<'heuristic' | 'claude' | null>(null);
   const [suggestedDate, setSuggestedDate] = useState<string>('');
   const [suggestedVendor, setSuggestedVendor] = useState<string>('');
@@ -128,6 +129,7 @@ export default function DocumentReviewScreen() {
           tags: string[];
           notes: string;
           suggestedFolderName: string;
+          suggestedSubfolderName?: string;
           source?: string;
           date?: string;
           vendor?: string;
@@ -143,6 +145,7 @@ export default function DocumentReviewScreen() {
             setSuggestedTags(Array.isArray(suggestion.tags) ? suggestion.tags : []);
             if (suggestion.notes) setSuggestedNotes(suggestion.notes);
             if (suggestion.suggestedFolderName) setSuggestedFolderName(suggestion.suggestedFolderName);
+            if (suggestion.suggestedSubfolderName) setSuggestedSubfolderName(suggestion.suggestedSubfolderName);
             if (suggestion.source === 'claude' || suggestion.source === 'heuristic') setSuggestedAiSource(suggestion.source);
             if (suggestion.date) setSuggestedDate(suggestion.date);
             if (suggestion.vendor) setSuggestedVendor(suggestion.vendor);
@@ -165,6 +168,7 @@ export default function DocumentReviewScreen() {
       tags?: string[];
       notes?: string;
       suggestedFolderName?: string;
+      suggestedSubfolderName?: string;
       source?: string;
       date?: string;
       vendor?: string;
@@ -175,6 +179,7 @@ export default function DocumentReviewScreen() {
       setSuggestedTags(Array.isArray(suggestion.tags) ? suggestion.tags : []);
       if (suggestion.notes) setSuggestedNotes(suggestion.notes);
       if (suggestion.suggestedFolderName) setSuggestedFolderName(suggestion.suggestedFolderName);
+      if (suggestion.suggestedSubfolderName) setSuggestedSubfolderName(suggestion.suggestedSubfolderName);
       if (suggestion.source === 'claude' || suggestion.source === 'heuristic') setSuggestedAiSource(suggestion.source);
       if (suggestion.date) setSuggestedDate(suggestion.date);
       if (suggestion.vendor) setSuggestedVendor(suggestion.vendor);
@@ -193,6 +198,7 @@ export default function DocumentReviewScreen() {
           apiRequest<{
             suggestedTitle: string; category: DocumentCategory;
             tags: string[]; notes: string; suggestedFolderName: string;
+            suggestedSubfolderName?: string;
             source?: string; date?: string; vendor?: string; amounts?: number[];
           }>('/v1/ai/suggest-document', {
             method: 'POST',
@@ -227,6 +233,7 @@ export default function DocumentReviewScreen() {
             const suggestion = await apiRequest<{
               suggestedTitle: string; category: DocumentCategory;
               tags: string[]; notes: string; suggestedFolderName: string;
+              suggestedSubfolderName?: string;
               source?: string; date?: string; vendor?: string; amounts?: number[];
             }>('/v1/ai/suggest-document', {
               method: 'POST',
@@ -313,9 +320,17 @@ export default function DocumentReviewScreen() {
       // 5. Auto-file into suggested folder (find or create)
       if (suggestedFolderName) {
         const nameLower = suggestedFolderName.toLowerCase();
-        const existing = folders.find((f) => f.name.toLowerCase() === nameLower);
-        const targetFolder = existing ?? addFolder(suggestedFolderName);
-        moveDocumentToFolder(documentId, targetFolder.id);
+        const existing = folders.find((f) => f.name.toLowerCase() === nameLower && !f.parentId);
+        const parentFolder = existing ?? addFolder(suggestedFolderName);
+        if (suggestedSubfolderName) {
+          const subLower = suggestedSubfolderName.toLowerCase();
+          const freshFolders = useDocumentStore.getState().folders;
+          const subFolder = freshFolders.find((f) => f.name.toLowerCase() === subLower && f.parentId === parentFolder.id)
+            ?? addFolder(suggestedSubfolderName, parentFolder.color, parentFolder.id);
+          moveDocumentToFolder(documentId, subFolder.id);
+        } else {
+          moveDocumentToFolder(documentId, parentFolder.id);
+        }
       }
 
       // Navigate to the new document's viewer.
@@ -447,7 +462,7 @@ export default function DocumentReviewScreen() {
             <Text style={styles.fieldLabel}>Will be filed in</Text>
             <View style={styles.tagRow}>
               <View style={[styles.tagChip, { backgroundColor: `${C.amber}22` }]}>
-                <Text style={[styles.tagChipText, { color: C.amber }]}>📁 {suggestedFolderName}</Text>
+                <Text style={[styles.tagChipText, { color: C.amber }]}>📁 {suggestedFolderName}{suggestedSubfolderName ? ` › ${suggestedSubfolderName}` : ''}</Text>
               </View>
             </View>
           </View>
