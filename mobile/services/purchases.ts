@@ -90,6 +90,8 @@ export async function checkProEntitlement(): Promise<boolean> {
     const customerInfo = await Purchases.getCustomerInfo();
     return hasProEntitlement(customerInfo);
   } catch (e) {
+    console.warn('[purchases] restorePurchases error', e);
+    console.warn('[purchases] checkProEntitlement error', e);
     return false;
   }
 }
@@ -110,6 +112,8 @@ export async function purchasePro(): Promise<BillingActionResult> {
       if (hasProEntitlement(customerInfo)) {
         return { ok: true };
       }
+    console.warn('[purchases] purchasePro error', e);
+    console.warn('[purchases] No package in offerings, falling back to direct product lookup');
 
       return {
         ok: false,
