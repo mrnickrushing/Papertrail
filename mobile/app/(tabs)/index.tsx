@@ -50,6 +50,13 @@ const CATEGORIES = [
   { key: 'tax',       label: 'Tax',        color: C.category.tax },
   { key: 'work',       label: 'Work',       color: C.category.work },
   { key: 'retirement', label: 'Retirement', color: C.category.retirement },
+  { key: 'insurance',  label: 'Insurance',  color: C.category.insurance },
+  { key: 'legal',      label: 'Legal',      color: C.category.legal },
+  { key: 'vehicle',    label: 'Vehicle',    color: C.category.vehicle },
+  { key: 'property',   label: 'Property',   color: C.category.property },
+  { key: 'education',  label: 'Education',  color: C.category.education },
+  { key: 'travel',     label: 'Travel',     color: C.category.travel },
+  { key: 'pet',        label: 'Pets',       color: C.category.pet },
 ] as const;
 
 const SORT_LABELS: Record<ReturnType<typeof useAppStore.getState>['sortBy'], string> = {

@@ -53,6 +53,13 @@ export const Colors = {
   catTax:      '#D97B2A',
   catWork:       '#5E72C4',
   catRetirement: '#B08D57',
+  catInsurance:  '#3FA7C9',
+  catLegal:      '#7C5C99',
+  catVehicle:    '#6E8CA0',
+  catProperty:   '#A8674A',
+  catEducation:  '#8E7CC3',
+  catTravel:     '#45B39A',
+  catPet:        '#D9788E',
   catOther:    '#8A8A96',
 } as const;
 
@@ -151,6 +158,13 @@ export const C = {
     tax:      Colors.catTax,
     work:       Colors.catWork,
     retirement: Colors.catRetirement,
+    insurance:  Colors.catInsurance,
+    legal:      Colors.catLegal,
+    vehicle:    Colors.catVehicle,
+    property:   Colors.catProperty,
+    education:  Colors.catEducation,
+    travel:     Colors.catTravel,
+    pet:        Colors.catPet,
     other:    Colors.catOther,
   },
 } as const;

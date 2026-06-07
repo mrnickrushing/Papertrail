@@ -31,6 +31,13 @@ const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   tax: 'Tax',
   work: 'Work',
   retirement: 'Retirement',
+  insurance: 'Insurance',
+  legal: 'Legal',
+  vehicle: 'Vehicle',
+  property: 'Property',
+  education: 'Education',
+  travel: 'Travel',
+  pet: 'Pet',
   other: 'Other',
 };
 
@@ -44,6 +51,13 @@ const CATEGORY_COLORS: Record<DocumentCategory, string> = {
   tax:      C.category.tax,
   work:       C.category.work,
   retirement: C.category.retirement,
+  insurance:  C.category.insurance,
+  legal:      C.category.legal,
+  vehicle:    C.category.vehicle,
+  property:   C.category.property,
+  education:  C.category.education,
+  travel:     C.category.travel,
+  pet:        C.category.pet,
   other:    C.category.other,
 };
 

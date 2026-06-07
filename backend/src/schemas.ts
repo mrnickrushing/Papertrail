@@ -10,6 +10,13 @@ export const documentCategorySchema = z.enum([
   'tax',
   'work',
   'retirement',
+  'insurance',
+  'legal',
+  'vehicle',
+  'property',
+  'education',
+  'travel',
+  'pet',
   'other',
 ]);
 

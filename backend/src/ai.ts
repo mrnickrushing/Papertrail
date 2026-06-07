@@ -15,14 +15,22 @@ function calcCostUsd(inputTokens: number, outputTokens: number): number {
 }
 
 const VALID_CATEGORIES: DocumentCategory[] = [
-  'receipt', 'bill', 'contract', 'id', 'warranty', 'medical', 'tax', 'work', 'retirement', 'other',
+  'receipt', 'bill', 'contract', 'id', 'warranty', 'medical', 'tax', 'work', 'retirement',
+  'insurance', 'legal', 'vehicle', 'property', 'education', 'travel', 'pet', 'other',
 ];
 
 const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
+  ['pet', /\b(veterinar\w*|vaccination record|rabies (?:certificate|vaccine|tag)|microchip (?:number|registration)|pet adoption|animal hospital|pet insurance|spay\/?neuter|pedigree (?:certificate|papers)|pet license)\b/i],
+  ['education', /\b(diploma|transcript|degree conferred|enrollment (?:verification|confirmation)|student loan|\bfafsa\b|tuition (?:statement|invoice|bill)|report card|certificate of completion|continuing education credits|alumni association)\b/i],
+  ['travel', /\b(passport (?:renewal|application)|visa (?:application|approval)|itinerary|boarding pass|e-?ticket|flight confirmation|hotel (?:confirmation|reservation)|travel insurance|customs declaration|immigration (?:form|document)|tsa pre.?check|global entry)\b/i],
+  ['vehicle', /\b(vehicle (?:registration|title)|license plate|\bvin\b|odometer (?:reading|disclosure)|department of motor vehicles|\bdmv\b|lienholder|auto loan|car loan|smog (?:check|certificate)|emissions test|certificate of title)\b/i],
+  ['legal', /\b(last will(?: and testament)?|living will|power of attorney|notariz\w*|notary public|estate plan\w*|executor|probate|legal guardian\w*|custody (?:agreement|arrangement|order)|divorce (?:decree|filing|petition)|court order|restraining order|small claims|judgment|decree|stipulation|legal counsel|plaintiff|defendant|attorney(?:'s fees)?|lawsuit|affidavit|docket|subpoena|deposition)\b/i],
+  ['insurance', /\b(insurance (?:policy|premium|claim|card)|policy number|premium (?:due|payment|amount)|deductible|insured (?:party|individual)|policyholder|underwrit\w*|explanation of benefits|\beob\b|co-?pay(?:ment)?|claim number|beneficiary designation)\b/i],
   ['bill', /\b(account number|statement balance|new balance|minimum payment|payment due|amount due|balance due|past due|autopay|auto-pay|billing (?:period|cycle|statement)|monthly statement|utility bill|electric(?:ity)? bill|gas bill|water bill|phone bill|internet bill|cable bill|credit card statement|mortgage statement)\b/i],
   ['retirement', /\b(401\(?k\)?|403\(?b\)?|\bira\b|roth ira|pension|retirement (?:plan|account|savings|benefits?)|annuity|social security (?:benefits?|administration|statement)|vested balance|required minimum distribution|\brmd\b|defined benefit|defined contribution|rollover)\b/i],
+  ['property', /\b(property deed|deed of trust|mortgage (?:agreement|application|approval)|lease agreement|rental agreement|landlord|tenant|closing disclosure|title insurance|homeowners association|\bhoa\b|escrow (?:account|statement)|home inspection|real estate (?:purchase|closing)|security deposit)\b/i],
   ['receipt', /\b(receipt|subtotal|total|paid|visa|mastercard|store)\b/i],
-  ['contract', /\b(contract|agreement|signature|party|terms|stipulation|judgment|decree|counsel|plaintiff|defendant|attorney|lawsuit|affidavit|docket|subpoena|deposition)\b/i],
+  ['contract', /\b(contract|agreement|signature|party|terms)\b/i],
   ['id', /\b(driver|license|passport|identification|dob)\b/i],
   ['warranty', /\b(warranty|serial|coverage|expires)\b/i],
   ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx|emergency|urgent care|panel|specimen|lab(?:oratory)?|glucose|cholesterol|triglycerides?|hdl|ldl|hemoglobin|a1c|metabolic|lipid|blood (?:work|test|count)|reference range|physician|provider|doctor|prescri\w*)\b|\bE\.?R\.?\b/i],
@@ -40,6 +48,13 @@ const CATEGORY_FOLDER: Record<DocumentCategory, string> = {
   tax: 'Tax Documents',
   work: 'Work',
   retirement: 'Retirement',
+  insurance: 'Insurance',
+  legal: 'Legal',
+  vehicle: 'Vehicle',
+  property: 'Property',
+  education: 'Education',
+  travel: 'Travel',
+  pet: 'Pets',
   other: 'Other Documents',
 };
 
@@ -65,7 +80,7 @@ type SuggestResult = {
 function isFallbackTitle(s: string): boolean {
   const t = s.trim();
   // Heuristic backend format: "PDF Document — Jun 2026"
-  if (/^(?:PDF|Scanned|Receipt|Bill|Contract|Id|Warranty|Medical|Tax|Work|Retirement|Other) Document — [A-Z][a-z]+ \d{4}$/.test(t)) return true;
+  if (/^(?:PDF|Scanned|Receipt|Bill|Contract|Id|Warranty|Medical|Tax|Work|Retirement|Insurance|Legal|Vehicle|Property|Education|Travel|Pet|Other) Document — [A-Z][a-z]+ \d{4}$/.test(t)) return true;
   // Mobile generateTitle() format: "Document Jun 6, 2026" / "Scan Jun 6, 2026" / etc.
   if (/^(?:Document|Scan|Photo|Import) [A-Z][a-z]+ \d{1,2}, \d{4}$/.test(t)) return true;
   return false;
@@ -160,7 +175,15 @@ function buildSchemaPrompt(existingFolders?: string[]): string {
 
   return `Analyse this document and respond with JSON containing exactly these fields:
 - "title": a concise descriptive title (max 80 chars)
-- "category": one of: receipt, bill, contract, id, warranty, medical, tax, work, retirement, other (use "bill" for recurring statements/invoices like utilities, credit cards, rent, mortgage, or subscriptions — "receipt" for one-time purchase proofs — "work" for employment documents like pay stubs, offer letters, performance reviews, or HR paperwork — and "retirement" for 401(k)/pension/IRA/social security statements and related plan documents)
+- "category": one of: receipt, bill, contract, id, warranty, medical, tax, work, retirement, insurance, legal, vehicle, property, education, travel, pet, other — guidance on overlapping types:
+  - "bill" for recurring statements/invoices like utilities, credit cards, rent, mortgage, or subscriptions; "receipt" for one-time purchase proofs
+  - "work" for employment documents like pay stubs, offer letters, performance reviews, or HR paperwork; "retirement" for 401(k)/pension/IRA/social security statements and plan documents
+  - "insurance" for policies, premium statements, claims, EOBs, and ID cards (health, auto, home, life) — even if they look like bills or medical paperwork
+  - "legal" for wills, power of attorney, court filings, custody/divorce papers, and other legal-process documents — use "contract" only for everyday agreements (leases, service/vendor agreements, NDAs) that aren't part of a legal proceeding or estate plan
+  - "vehicle" for registration, title, DMV paperwork, auto loans, and maintenance/inspection records; "property" for home deeds, mortgages (the agreement itself, not the monthly statement), leases, closing documents, and HOA paperwork
+  - "education" for diplomas, transcripts, report cards, student loans, and tuition statements
+  - "travel" for itineraries, boarding passes, visas, and trip confirmations — use "id" for passports and other identity documents
+  - "pet" for veterinary records, vaccination/adoption papers, and pet insurance
 - "tags": array of 2-4 meaningful lowercase keyword tags (not just the category name or file type)
 - "notes": one sentence describing any key detail worth remembering (amount, date, expiry, party name), or omit if nothing stands out
 - "date": most relevant date found on the document in YYYY-MM-DD format, or omit if none

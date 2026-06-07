@@ -25,6 +25,13 @@ const DOCUMENT_CATEGORIES = new Set<Document['category']>([
   'tax',
   'work',
   'retirement',
+  'insurance',
+  'legal',
+  'vehicle',
+  'property',
+  'education',
+  'travel',
+  'pet',
   'other',
 ]);
 

@@ -17,6 +17,13 @@ export type DocumentCategory =
   | 'tax'
   | 'work'
   | 'retirement'
+  | 'insurance'
+  | 'legal'
+  | 'vehicle'
+  | 'property'
+  | 'education'
+  | 'travel'
+  | 'pet'
   | 'other';
 
 export type OCRStatus = 'pending' | 'processing' | 'done' | 'failed' | 'unavailable';

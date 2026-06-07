@@ -16,6 +16,13 @@ const CATEGORY_META: Record<
   tax:      { label: 'Tax',      color: Colors.catTax },
   work:       { label: 'Work',       color: Colors.catWork },
   retirement: { label: 'Retirement', color: Colors.catRetirement },
+  insurance: { label: 'Insurance', color: Colors.catInsurance },
+  legal:     { label: 'Legal',     color: Colors.catLegal },
+  vehicle:   { label: 'Vehicle',   color: Colors.catVehicle },
+  property:  { label: 'Property',  color: Colors.catProperty },
+  education: { label: 'Education', color: Colors.catEducation },
+  travel:    { label: 'Travel',    color: Colors.catTravel },
+  pet:       { label: 'Pet',       color: Colors.catPet },
   other:    { label: 'Other',    color: Colors.catOther },
 };
 
