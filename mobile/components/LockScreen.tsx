@@ -5,8 +5,10 @@
  * Calls authenticate() automatically on mount and on button press.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
+  type AppStateStatus,
   View,
   Text,
   Pressable,
@@ -26,13 +28,30 @@ export function LockScreen({ onUnlocked }: LockScreenProps) {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometric');
   const [error, setError] = useState<string | null>(null);
+  const isAuthenticatingRef = useRef(false);
 
   useEffect(() => {
     getBiometricCapability().then(cap => setBiometricLabel(cap.label));
-    tryAuth();
+
+    // The lock screen mounts the instant the app leaves the foreground
+    // (isLocked flips true on the active -> background/inactive transition),
+    // so prompting immediately would fire Face ID while the app is still
+    // backgrounding — iOS can't show the sheet then and instantly reports
+    // failure. Only prompt once the app is actually active: right away if
+    // we're already foregrounded (e.g. cold launch into a locked vault), or
+    // when AppState transitions back to "active" (returning from background).
+    if (AppState.currentState === 'active') {
+      tryAuth();
+    }
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') tryAuth();
+    });
+    return () => sub.remove();
   }, []);
 
   async function tryAuth() {
+    if (isAuthenticatingRef.current) return;
+    isAuthenticatingRef.current = true;
     setIsAuthenticating(true);
     setError(null);
     try {
@@ -45,6 +64,7 @@ export function LockScreen({ onUnlocked }: LockScreenProps) {
     } catch {
       setError('Authentication unavailable.');
     } finally {
+      isAuthenticatingRef.current = false;
       setIsAuthenticating(false);
     }
   }
