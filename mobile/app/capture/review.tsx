@@ -119,6 +119,10 @@ export default function DocumentReviewScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const isMounted = useRef(true);
 
+  // Free users at the document limit can't save anyway — show the paywall
+  // immediately instead of burning OCR/AI tokens on a doc that can't be kept.
+  const atFreeLimit = documents.length >= FREE_DOCUMENT_LIMIT && !isPro;
+
   useEffect(() => {
     isMounted.current = true;
     return () => {
@@ -126,9 +130,13 @@ export default function DocumentReviewScreen() {
     };
   }, [params.name, params.source]);
 
+  useEffect(() => {
+    if (atFreeLimit) setShowPaywall(true);
+  }, [atFreeLimit]);
 
   // Auto-run OCR then AI suggestions
   useEffect(() => {
+    if (atFreeLimit) return;
     const isPdf = !params.uri || isPDFLike(params.uri, params.mimeType);
     if (isPdf) {
       setOCRStatus('unavailable');
@@ -288,7 +296,7 @@ export default function DocumentReviewScreen() {
         if (!isMounted.current) return;
         setOCRStatus('unavailable');
       });
-  }, [autoOcr, isPro, params.mimeType, params.name, params.uri]);
+  }, [atFreeLimit, autoOcr, isPro, params.mimeType, params.name, params.uri]);
 
   const handleSave = useCallback(async () => {
     if (!params.uri || isSaving) return;
