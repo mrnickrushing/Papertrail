@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse') as (buffer: Buffer, options?: { max?: number }) => Promise<{ text: string }>;
 import type { DocumentCategory } from './types.js';
 
-const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-3-5-haiku-20241022';
+const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-haiku-4-5-20251001';
 
 const VALID_CATEGORIES: DocumentCategory[] = [
   'receipt', 'contract', 'id', 'warranty', 'medical', 'tax', 'other',
@@ -191,17 +191,16 @@ export async function suggestDocument(input: {
 
     if (hasPdf) {
       // Send the PDF directly — Claude reads it natively without text extraction
-      const response = await (client as any).beta.messages.create({
+      const response = await client.messages.create({
         model: DEFAULT_ANTHROPIC_MODEL,
         max_tokens: 512,
-        betas: ['pdfs-2024-09-25'],
         system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
         messages: [{
           role: 'user',
           content: [
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.pdfBase64 } },
             { type: 'text', text: `${JSON_SCHEMA_PROMPT}${contextLabel ? `\n\nFilename hint: ${contextLabel}` : ''}` },
-          ],
+          ] as unknown as Anthropic.MessageParam['content'],
         }],
       });
       rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
