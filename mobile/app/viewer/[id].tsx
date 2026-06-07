@@ -34,6 +34,7 @@ import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/
 import { TagEditor } from '@/components/TagEditor';
 import { FolderPickerModal } from '@/components/FolderPickerModal';
 import { PaywallModal } from '@/components/PaywallModal';
+import { OverflowMenu, type OverflowMenuAction } from '@/components/OverflowMenu';
 import { C, T, R, S } from '@/theme/tokens';
 import type { DocumentCategory, Folder } from '@/types/document';
 
@@ -430,6 +431,32 @@ export default function DocumentViewerScreen() {
     ? folders.find((folder) => folder.id === document.folderId) ?? null
     : null;
 
+  // Secondary header actions, grouped behind a single overflow menu so the
+  // 44px header row isn't crowded with three separate icon buttons.
+  const headerMenuActions: OverflowMenuAction[] = [
+    {
+      key: 'favorite',
+      label: document.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+      icon: 'star',
+      active: document.isFavorite,
+      onPress: () => toggleFavorite(document.id),
+    },
+    {
+      key: 'share',
+      label: 'Share',
+      icon: 'share',
+      loading: isSharing,
+      onPress: handleShare,
+    },
+    {
+      key: 'delete',
+      label: 'Delete Document',
+      icon: 'trash-2',
+      destructive: true,
+      onPress: handleDelete,
+    },
+  ];
+
   return (
     <View
       style={[styles.container, { paddingTop: insets.top }]}
@@ -449,26 +476,7 @@ export default function DocumentViewerScreen() {
           </View>
         </View>
 
-        <View style={styles.headerActions}>
-          <Pressable
-            style={styles.headerIconBtn}
-            onPress={() => toggleFavorite(document.id)}
-            hitSlop={8}
-          >
-            <Text style={[styles.headerIcon, document.isFavorite && { color: C.amber }]}>
-              {document.isFavorite ? '★' : '☆'}
-            </Text>
-          </Pressable>
-          <Pressable style={styles.headerIconBtn} onPress={handleShare} hitSlop={8}>
-            {isSharing
-              ? <ActivityIndicator size="small" color={C.amber} />
-              : <Text style={styles.headerIcon}>↑</Text>
-            }
-          </Pressable>
-          <Pressable style={styles.headerIconBtn} onPress={handleDelete} hitSlop={8}>
-            <Text style={[styles.headerIcon, { color: C.danger }]}>🗑</Text>
-          </Pressable>
-        </View>
+        <OverflowMenu actions={headerMenuActions} accessibilityLabel="Document actions" />
       </View>
 
       {/* ── Scrollable content ── */}
@@ -988,12 +996,6 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   headerCategoryText: { fontSize: T.xs, color: C.ash },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: S[1] },
-  headerIconBtn: {
-    width: 44, height: 44,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerIcon: { fontSize: 20, color: C.ash },
   scroll: { flex: 1 },
   previewCard: {
     margin: S[4],
