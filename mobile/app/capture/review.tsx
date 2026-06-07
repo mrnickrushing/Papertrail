@@ -75,6 +75,14 @@ function generateTitle(source: string, mimeType?: string): string {
   return `Import ${date}`;
 }
 
+// The router param's reported size can be 0/undefined — fall back to the
+// actual on-disk size so large files can't slip past the AI base64 limit.
+async function resolveFileSize(uri: string | undefined, reportedBytes: number): Promise<number> {
+  if (reportedBytes > 0) return reportedBytes;
+  if (!uri) return 0;
+  return getFileSize(uri);
+}
+
 export default function DocumentReviewScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
@@ -129,11 +137,12 @@ export default function DocumentReviewScreen() {
       if (isPro && isBackendConfigured() && (params.name || params.uri)) {
         setAiStatus('processing');
         const PDF_BASE64_SIZE_LIMIT = 4 * 1024 * 1024;
-        const fileSizeBytes = params.size ? parseInt(params.size, 10) : 0;
-        const pdfReadPromise =
-          params.uri && (!fileSizeBytes || fileSizeBytes <= PDF_BASE64_SIZE_LIMIT)
+        const reportedSize = params.size ? parseInt(params.size, 10) : 0;
+        const pdfReadPromise = resolveFileSize(params.uri, reportedSize).then((actualSize) =>
+          params.uri && actualSize <= PDF_BASE64_SIZE_LIMIT
             ? FileSystem.readAsStringAsync(params.uri, { encoding: FileSystem.EncodingType.Base64 }).catch(() => undefined)
-            : Promise.resolve(undefined);
+            : undefined
+        );
         pdfReadPromise.then((pdfBase64) =>
         apiRequest<{
           suggestedTitle: string;
@@ -173,8 +182,10 @@ export default function DocumentReviewScreen() {
       return;
     }
     const FILE_SIZE_LIMIT = 4 * 1024 * 1024;
-    const fileSizeBytes = params.size ? parseInt(params.size, 10) : 0;
-    const canReadImage = !!params.uri && (!fileSizeBytes || fileSizeBytes <= FILE_SIZE_LIMIT);
+    const reportedImageSize = params.size ? parseInt(params.size, 10) : 0;
+    const canReadImagePromise = resolveFileSize(params.uri, reportedImageSize).then(
+      (actualSize) => !!params.uri && actualSize <= FILE_SIZE_LIMIT
+    );
 
     const applySuggestion = (suggestion: {
       suggestedTitle?: string;
@@ -207,9 +218,10 @@ export default function DocumentReviewScreen() {
       // Call AI with image vision — no OCR available but Claude can read the file directly
       if (isPro && isBackendConfigured() && params.uri) {
         setAiStatus('processing');
-        (canReadImage
-          ? FileSystem.readAsStringAsync(params.uri, { encoding: FileSystem.EncodingType.Base64 }).catch(() => undefined)
-          : Promise.resolve(undefined)
+        canReadImagePromise.then((canReadImage) =>
+          canReadImage
+            ? FileSystem.readAsStringAsync(params.uri, { encoding: FileSystem.EncodingType.Base64 }).catch(() => undefined)
+            : Promise.resolve(undefined)
         ).then((imageBase64) =>
           apiRequest<{
             suggestedTitle: string; category: DocumentCategory;
@@ -244,7 +256,7 @@ export default function DocumentReviewScreen() {
           setAiStatus('processing');
           try {
             // Read image for vision — Claude uses it alongside OCR text for best results
-            const imageBase64 = canReadImage
+            const imageBase64 = (await canReadImagePromise)
               ? await FileSystem.readAsStringAsync(params.uri, { encoding: FileSystem.EncodingType.Base64 }).catch(() => undefined)
               : undefined;
             const suggestion = await apiRequest<{

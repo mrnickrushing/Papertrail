@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore, useDocumentStore } from '@/store';
 import { useProStore } from '@/store/proStore';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
+import { getFileSize } from '@/services/fileStorage';
 import { DocumentCard } from '@/components/DocumentCard';
 import { BulkActionBar } from '@/components/BulkActionBar';
 import { TagEditor } from '@/components/TagEditor';
@@ -263,7 +264,11 @@ export default function VaultScreen() {
               if (!doc) return false;
               try {
                 const FILE_SIZE_LIMIT = 4 * 1024 * 1024;
-                const canReadFile = !!doc.fileUri && (doc.fileSizeBytes ?? 0) <= FILE_SIZE_LIMIT;
+                // Some pickers report fileSizeBytes as 0/undefined — fall back
+                // to the actual on-disk size so large files can't slip past
+                // the AI size guard.
+                const actualSize = doc.fileSizeBytes || (doc.fileUri ? await getFileSize(doc.fileUri) : 0);
+                const canReadFile = !!doc.fileUri && actualSize <= FILE_SIZE_LIMIT;
                 let pdfBase64: string | undefined;
                 let imageBase64: string | undefined;
                 if (!doc.ocrText && canReadFile) {

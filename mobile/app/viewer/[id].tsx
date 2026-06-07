@@ -31,6 +31,7 @@ import { useDocumentStore } from '@/store/documentStore';
 import { useAppStore } from '@/store/appStore';
 import { useProStore } from '@/store/proStore';
 import { shareDocument } from '@/services/exportService';
+import { getFileSize } from '@/services/fileStorage';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
 import { TagEditor } from '@/components/TagEditor';
 import { FolderPickerModal } from '@/components/FolderPickerModal';
@@ -276,7 +277,10 @@ export default function DocumentViewerScreen() {
 
     try {
       const FILE_SIZE_LIMIT = 4 * 1024 * 1024;
-      const canReadFile = !!document.fileUri && (document.fileSizeBytes ?? 0) <= FILE_SIZE_LIMIT;
+      // Some pickers report fileSizeBytes as 0/undefined — fall back to the
+      // actual on-disk size so large files can't slip past the AI size guard.
+      const actualSize = document.fileSizeBytes || (document.fileUri ? await getFileSize(document.fileUri) : 0);
+      const canReadFile = !!document.fileUri && actualSize <= FILE_SIZE_LIMIT;
 
       let pdfBase64: string | undefined;
       let imageBase64: string | undefined;
@@ -556,7 +560,7 @@ export default function DocumentViewerScreen() {
             {document.isFavorite && <MetaChip label="★ Favorited" amber />}
             <MetaChip label={currentFolder?.name ?? 'Unfiled'} />
             {document.inferredDate && (
-              <MetaChip label={`📅 ${new Date(document.inferredDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).replace(/Invalid Date/, document.inferredDate)}`} />
+              <MetaChip label={`📅 ${formatInferredDate(document.inferredDate)}`} />
             )}
             {document.vendor && <MetaChip label={`🏢 ${document.vendor}`} />}
             {document.amounts && document.amounts.length > 0 && (
@@ -870,6 +874,12 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatInferredDate(raw: string): string {
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatRelativeTime(iso: string): string {

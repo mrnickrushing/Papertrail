@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   dangerText: { fontSize: T.base, color: C.danger, fontWeight: '600' },
   dangerTextDisabled: { color: C.ink4 },
   accountActionRow: { alignItems: 'center', justifyContent: 'center', paddingVertical: S[4], minHeight: 52 },
-  accountActionText: { fontSize: T.base, color: C.amber, fontWeight: '600' },
+  accountActionText: { fontSize: T.base, color: C.cream, fontWeight: '600' },
   accountDeleteText: { fontSize: T.base, color: C.danger, fontWeight: '600' },
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: S[4], paddingVertical: S[4], minHeight: 64 },
   actionContent: { flex: 1, gap: 2 },

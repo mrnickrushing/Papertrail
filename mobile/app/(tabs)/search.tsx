@@ -19,6 +19,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  InteractionManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -76,15 +77,19 @@ export default function SearchScreen() {
       return;
     }
     setIsSearching(true);
-    setTimeout(() => {
+    // setTimeout(0) doesn't actually yield to the UI thread on RN — the heavy
+    // scan would still run synchronously and drop frames. runAfterInteractions
+    // defers it until animations/gestures settle, and is cancellable on unmount.
+    const handle = InteractionManager.runAfterInteractions(() => {
       const r = searchFn(q);
       setResults(r);
       setIsSearching(false);
-    }, 0);
+    });
+    return () => handle.cancel();
   }, [searchFn]);
 
   useEffect(() => {
-    runSearch(debouncedQuery);
+    return runSearch(debouncedQuery);
   }, [debouncedQuery, runSearch]);
 
   const commitSearch = useCallback(async (q: string) => {
