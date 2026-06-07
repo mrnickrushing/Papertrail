@@ -35,6 +35,7 @@ import { getBiometricCapability, authenticate } from '@/services/biometricServic
 import { isBackendConfigured } from '@/services/api';
 import { resetSyncState } from '@/services/syncService';
 import { isAdminBypassConfigured, validateAdminBypassCode } from '@/services/adminAccess';
+import { deleteStoredPasswordHash } from '@/services/secureCredentials';
 import { C, T, R, S } from '@/theme/tokens';
 
 const APP_VERSION = Constants.expoConfig?.version ?? 'Unknown';
@@ -327,6 +328,7 @@ export default function SettingsScreen() {
                 deletedFolderIds: Array.from(new Set([...state.deletedFolderIds, ...folderIds])),
               }));
 
+              await deleteStoredPasswordHash();
               setAdminAccess(false);
               clearAccountProfile();
               router.replace('/account');

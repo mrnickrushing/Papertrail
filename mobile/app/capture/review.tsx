@@ -36,7 +36,7 @@ import { useAppStore, useDocumentStore, useProStore, FREE_DOCUMENT_LIMIT } from 
 import { PaywallModal } from '@/components/PaywallModal';
 import { saveDocumentFile, generateThumbnail, getFileSize, getExtension } from '@/services/fileStorage';
 import { extractText, isOCRAvailable } from '@/services/ocr';
-import { isPDFLike } from '@/services/pdfService';
+import { isPDFLike, getPDFInfo } from '@/services/pdfService';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
 import { C, T, R, S } from '@/theme/tokens';
 import type { DocumentCategory } from '@/types/document';
@@ -372,6 +372,10 @@ export default function DocumentReviewScreen() {
         ? parseInt(params.size, 10)
         : await getFileSize(localUri);
 
+      // 3b. Get true page count for PDFs (parsed locally with pdf-lib; falls
+      // back to 1 for images and unparseable PDFs)
+      const pageCount = isPdfDoc ? (await getPDFInfo(localUri)).pageCount : 1;
+
       // 4. Write to DB via store
       await addDocument({
         id: documentId,
@@ -381,7 +385,7 @@ export default function DocumentReviewScreen() {
         thumbnailUri,
         mimeType: params.mimeType ?? (ext === 'pdf' ? 'application/pdf' : 'image/jpeg'),
         fileSizeBytes: sizeBytes,
-        pageCount: 1,
+        pageCount,
         ocrText: ocrText ?? undefined,
         ocrStatus:
           ocrStatus === 'done'

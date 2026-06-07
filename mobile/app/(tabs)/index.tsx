@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore, useDocumentStore, useProStore } from '@/store';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
 import { getFileSize } from '@/services/fileStorage';
+import { createSampleDocument } from '@/services/sampleDocument';
 import { DocumentCard } from '@/components/DocumentCard';
 import { BulkActionBar } from '@/components/BulkActionBar';
 import { TagEditor } from '@/components/TagEditor';
@@ -31,6 +32,7 @@ import { FAB } from '@/components/FAB';
 import { EmptyState } from '@/components/EmptyState';
 import { SwipeableCard } from '@/components/SwipeableCard';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { HealthRing } from '@/components/HealthRing';
 import { Colors, Typography, Spacing } from '@/theme';
 import { C, T, S, R } from '@/theme/tokens';
 import type { SearchFilters, DocumentCategory, Document } from '@/types/document';
@@ -81,6 +83,7 @@ export default function VaultScreen() {
   // Fine-grained selectors avoid re-rendering the whole Vault on unrelated
   // store changes (e.g. another document's OCR status flip).
   const documents = useDocumentStore(s => s.documents);
+  const addDocument = useDocumentStore(s => s.addDocument);
   const folders = useDocumentStore(s => s.folders);
   const isLoading = useDocumentStore(s => s.isLoading);
   const filters = useDocumentStore(s => s.filters);
@@ -397,6 +400,21 @@ export default function VaultScreen() {
     setFilters({ ...filters, tags: next.length ? next : undefined });
   }, [filters, setFilters]);
 
+  const [isAddingSample, setIsAddingSample] = useState(false);
+  const handleTrySampleDocument = useCallback(async () => {
+    if (isAddingSample) return;
+    setIsAddingSample(true);
+    try {
+      const sample = await createSampleDocument();
+      await addDocument(sample);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Couldn’t Add Sample', 'Something went wrong creating the sample document. Try again in a moment.');
+    } finally {
+      setIsAddingSample(false);
+    }
+  }, [isAddingSample, addDocument]);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -435,6 +453,9 @@ export default function VaultScreen() {
         style={{ paddingTop: insets.top + Spacing['4'] }}
         title={selectionMode ? `${selectedIds.size} selected` : 'FileTrail'}
         subtitle={selectionMode ? undefined : `${visibleDocuments.length} document${visibleDocuments.length !== 1 ? 's' : ''}`}
+        subtitleAccessory={
+          selectionMode || documents.length === 0 ? undefined : <HealthRing documents={documents} size={22} strokeWidth={2.5} />
+        }
         right={
           selectionMode ? (
             <Pressable onPress={selectAll} hitSlop={8}>
@@ -572,6 +593,8 @@ export default function VaultScreen() {
               icon="file-text"
               title="Your vault is empty"
               subtitle="Capture receipts, contracts, IDs, and more — everything stays on your device."
+              actionLabel={isAddingSample ? 'Adding sample…' : 'Try a sample document'}
+              onAction={handleTrySampleDocument}
               showFABHint
             />
           }

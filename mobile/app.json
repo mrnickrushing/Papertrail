@@ -57,7 +57,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ],
     "scheme": "filetrail",
     "experiments": {

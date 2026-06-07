@@ -4,16 +4,16 @@
  * Single-file share: wraps expo-sharing with a file-URI copy to cache so the
  * share sheet always gets a named file rather than a deep private path.
  *
- * ZIP export: reads each document file as base64 via expo-file-system, packs
- * them with jszip (pure-JS, no native module needed), writes the archive to
- * the cache directory, then opens the share sheet.
- *
- * Both paths are safe to call in Expo Go and in development builds.
+ * ZIP export: copies each document file into a staging directory (a plain
+ * file-to-file copy via expo-file-system — no base64 decoding), then hands
+ * the whole directory to `react-native-zip-archive`, which streams it into
+ * an archive natively. Nothing is loaded into JS memory, so large vaults
+ * export without risking an OOM crash.
  */
 
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import JSZip from 'jszip';
+import { zip } from 'react-native-zip-archive';
 import type { Document } from '@/types/document';
 
 // ─── Single document ──────────────────────────────────────────────────────────
@@ -47,9 +47,6 @@ export type ZipProgress = {
   filename: string;
 };
 
-// Warn (but don't hard-block) above this threshold to avoid OOM on large vaults.
-const ZIP_SIZE_WARN_BYTES = 100 * 1024 * 1024; // 100 MB
-
 export async function exportAllAsZip(
   docs: Document[],
   onProgress?: (p: ZipProgress) => void,
@@ -63,67 +60,53 @@ export async function exportAllAsZip(
     throw new Error('No documents to export.');
   }
 
-  const totalBytes = docs.reduce((sum, d) => sum + (d.fileSizeBytes ?? 0), 0);
-  if (totalBytes > ZIP_SIZE_WARN_BYTES) {
-    throw new Error(
-      `Export is too large (${(totalBytes / (1024 * 1024)).toFixed(0)} MB). ` +
-      'Select fewer documents or export them individually via the share button.',
-    );
-  }
+  const stagingDir = `${FileSystem.cacheDirectory}filetrail-export-staging/`;
+  await FileSystem.deleteAsync(stagingDir, { idempotent: true });
+  await FileSystem.makeDirectoryAsync(stagingDir, { intermediates: true });
 
-  const zip = new JSZip();
-  const usedNames = new Set<string>();
-  let addedFiles = 0;
+  try {
+    const usedNames = new Set<string>();
+    let copiedFiles = 0;
 
-  for (let i = 0; i < docs.length; i++) {
-    const doc = docs[i];
-    onProgress?.({ current: i + 1, total: docs.length, filename: doc.title });
+    for (let i = 0; i < docs.length; i++) {
+      const doc = docs[i];
+      onProgress?.({ current: i + 1, total: docs.length, filename: doc.title });
 
-    let base64: string;
-    try {
-      base64 = await FileSystem.readAsStringAsync(doc.fileUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-    } catch {
-      // Skip files that can't be read (deleted from disk etc.)
-      continue;
+      const ext = extensionFromUri(doc.fileUri);
+      let name = sanitizeFilename(doc.title) + ext;
+
+      // Deduplicate filenames within the archive.
+      if (usedNames.has(name)) {
+        name = sanitizeFilename(doc.title) + `_${doc.id.slice(0, 6)}` + ext;
+      }
+      usedNames.add(name);
+
+      try {
+        await FileSystem.copyAsync({ from: doc.fileUri, to: stagingDir + name });
+        copiedFiles++;
+      } catch {
+        // Skip files that can't be read (deleted from disk etc.)
+      }
     }
 
-    const ext = extensionFromUri(doc.fileUri);
-    let name = sanitizeFilename(doc.title) + ext;
-
-    // Deduplicate filenames within the archive.
-    if (usedNames.has(name)) {
-      name = sanitizeFilename(doc.title) + `_${doc.id.slice(0, 6)}` + ext;
+    if (copiedFiles === 0) {
+      throw new Error('No readable document files were found to export.');
     }
-    usedNames.add(name);
 
-    zip.file(name, base64, { base64: true });
-    addedFiles++;
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const zipPath = `${FileSystem.cacheDirectory}filetrail-export-${timestamp}.zip`;
+    await FileSystem.deleteAsync(zipPath, { idempotent: true });
+
+    await zip(stagingDir, zipPath);
+
+    await Sharing.shareAsync(zipPath, {
+      mimeType: 'application/zip',
+      dialogTitle: 'Export FileTrail Documents',
+      UTI: 'public.zip-archive',
+    });
+  } finally {
+    await FileSystem.deleteAsync(stagingDir, { idempotent: true });
   }
-
-  if (addedFiles === 0) {
-    throw new Error('No readable document files were found to export.');
-  }
-
-  const zipBase64 = await zip.generateAsync({
-    type: 'base64',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 },
-  });
-
-  const timestamp = new Date().toISOString().slice(0, 10);
-  const zipPath = FileSystem.cacheDirectory + `filetrail-export-${timestamp}.zip`;
-
-  await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  await Sharing.shareAsync(zipPath, {
-    mimeType: 'application/zip',
-    dialogTitle: 'Export FileTrail Documents',
-    UTI: 'public.zip-archive',
-  });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

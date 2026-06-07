@@ -16,6 +16,13 @@ export interface AccountProfile {
   email: string;
   provider: AccountProvider;
   appleUserId?: string;
+  /**
+   * Legacy field — older builds stored the password hash here, persisted to
+   * AsyncStorage as plain JSON. New hashes live in expo-secure-store (see
+   * services/secureCredentials.ts) instead. This stays optional only so the
+   * one-time migration in app/account.tsx can read and clear leftover values;
+   * `partialize` below strips it before anything is written to disk.
+   */
   passwordHash?: string;
   createdAt: string;
   userId?: string;
@@ -102,7 +109,11 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         biometricEnabled: state.biometricEnabled,
         hasOnboarded: state.hasOnboarded,
-        accountProfile: state.accountProfile,
+        // Never write passwordHash to AsyncStorage — it lives in
+        // expo-secure-store instead (see services/secureCredentials.ts).
+        accountProfile: state.accountProfile
+          ? { ...state.accountProfile, passwordHash: undefined }
+          : null,
         isAccountAuthenticated: state.isAccountAuthenticated,
         viewMode: state.viewMode,
         sortBy: state.sortBy,

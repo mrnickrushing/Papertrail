@@ -23,6 +23,10 @@ import {
 import { C, R, S, T } from '@/theme/tokens';
 import { hashPassword, verifyPassword, registerUserWithBackend } from '@/services/userService';
 import { createHash } from '@/services/hashUtils';
+import {
+  getStoredPasswordHash,
+  setStoredPasswordHash,
+} from '@/services/secureCredentials';
 
 type AuthMode = 'create' | 'login';
 type BusyAction = 'manual' | 'apple' | null;
@@ -71,6 +75,7 @@ export default function AccountScreen() {
   const [ownerError, setOwnerError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [storedPasswordHash, setLocalPasswordHash] = useState<string | null>(null);
   const isMounted = React.useRef(true);
   React.useEffect(() => {
     isMounted.current = true;
@@ -78,6 +83,37 @@ export default function AccountScreen() {
   }, []);
   const ownerAccessConfigured = isAdminBypassConfigured();
   const adminDefaults = getAdminProfileDefaults();
+
+  // One-time migration: older builds stored the password hash on
+  // accountProfile (persisted to AsyncStorage as plain JSON). Move any
+  // leftover value into expo-secure-store and strip it from the profile.
+  const hasCheckedCredentials = React.useRef(false);
+  useEffect(() => {
+    if (hasCheckedCredentials.current) return;
+    hasCheckedCredentials.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const legacyHash = accountProfile?.passwordHash;
+      if (legacyHash) {
+        try {
+          await setStoredPasswordHash(legacyHash);
+          useAppStore.setState((state) => (
+            state.accountProfile
+              ? { accountProfile: { ...state.accountProfile, passwordHash: undefined } }
+              : {}
+          ));
+        } catch {
+          // Migration failed — leave the legacy hash in place; it'll still
+          // work for verification and we can retry next launch.
+        }
+      }
+      const hash = legacyHash ?? (await getStoredPasswordHash());
+      if (!cancelled) setLocalPasswordHash(hash ?? null);
+    })();
+
+    return () => { cancelled = true; };
+  }, [accountProfile]);
 
   useEffect(() => {
     let active = true;
@@ -167,12 +203,13 @@ export default function AccountScreen() {
     }
 
     const pwHash = await hashPassword(password);
+    await setStoredPasswordHash(pwHash);
+    setLocalPasswordHash(pwHash);
     const newProfile = {
       fullName: trimmedName,
       email: normalizedEmail,
       provider: 'email' as const,
       createdAt: new Date().toISOString(),
-      passwordHash: pwHash,
     };
     completeAccountSetup(newProfile);
 
@@ -214,8 +251,9 @@ export default function AccountScreen() {
       return;
     }
 
-    if (accountProfile.passwordHash) {
-      const { ok, needsRehash } = await verifyPassword(password, accountProfile.passwordHash);
+    const existingHash = await getStoredPasswordHash();
+    if (existingHash) {
+      const { ok, needsRehash } = await verifyPassword(password, existingHash);
       if (!ok) {
         fail('That password does not match this FileTrail account.');
         return;
@@ -224,14 +262,15 @@ export default function AccountScreen() {
         // Legacy unsalted SHA-256 → upgrade to PBKDF2-style hash transparently.
         try {
           const upgraded = await hashPassword(password);
-          completeAccountSetup({ ...accountProfile, passwordHash: upgraded });
+          await setStoredPasswordHash(upgraded);
+          setLocalPasswordHash(upgraded);
         } catch {
-          // Non-fatal: keep the legacy hash, user can still log in.
+          // Non-fatal: keep the existing hash, user can still log in.
         }
       }
     }
 
-    if (!accountProfile.passwordHash && password.trim().length > 0) {
+    if (!existingHash && password.trim().length > 0) {
       fail('This local account was created before passwords were required. Leave password blank or recreate the account.');
       return;
     }
@@ -503,7 +542,7 @@ export default function AccountScreen() {
               textContentType={isCreateMode ? 'newPassword' : 'password'}
               editable={!isWorking}
             />
-            {!isCreateMode && accountProfile?.provider === 'email' && !accountProfile.passwordHash && (
+            {!isCreateMode && accountProfile?.provider === 'email' && !storedPasswordHash && (
               <Text style={styles.fieldHint}>
                 This device has an older local account profile. Email-only login still works.
               </Text>

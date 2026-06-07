@@ -2,18 +2,54 @@
  * documentStore.ts — Local-first Zustand store for documents and folders.
  *
  * The current app is intentionally offline-first: document metadata is persisted
- * with AsyncStorage, while the original files live in the app document directory.
+ * with MMKV (a fast, synchronous native key-value store), while the original
+ * files live in the app document directory.
  */
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MMKV } from 'react-native-mmkv';
 import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import { deleteDocumentFiles } from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 import { syncMetadata, type Tombstone } from '@/services/syncService';
 import { Colors } from '@/theme';
+
+const DOCUMENTS_STORE_KEY = 'filetrail-documents-v2';
+
+const mmkv = new MMKV({ id: 'filetrail-documents' });
+
+// MMKV is synchronous and natively backed (no JSON round-trip through the
+// React Native bridge), which matters here since document libraries can grow
+// into the thousands of entries. `getItem` doubles as a one-time migration:
+// older builds persisted this key with AsyncStorage, so on first read we copy
+// any pre-existing value into MMKV and remove it from AsyncStorage.
+const mmkvStorage: StateStorage = {
+  getItem: async (name) => {
+    const current = mmkv.getString(name);
+    if (current !== undefined) return current;
+
+    try {
+      const legacy = await AsyncStorage.getItem(name);
+      if (legacy != null) {
+        mmkv.set(name, legacy);
+        await AsyncStorage.removeItem(name);
+        return legacy;
+      }
+    } catch {
+      // Best-effort migration — fall through to a clean slate.
+    }
+    return null;
+  },
+  setItem: (name, value) => {
+    mmkv.set(name, value);
+  },
+  removeItem: (name) => {
+    mmkv.delete(name);
+  },
+};
 
 const DOCUMENT_CATEGORIES = new Set<Document['category']>([
   'receipt',
@@ -601,8 +637,8 @@ export const useDocumentStore = create<DocumentState>()(
       },
     }),
     {
-      name: 'filetrail-documents-v2',
-      storage: createJSONStorage(() => AsyncStorage),
+      name: DOCUMENTS_STORE_KEY,
+      storage: createJSONStorage(() => mmkvStorage),
       merge: (persistedState, currentState) => ({
         ...currentState,
         ...sanitizePersistedState(persistedState),

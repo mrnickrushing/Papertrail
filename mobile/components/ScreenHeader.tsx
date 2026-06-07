@@ -13,16 +13,23 @@ import { C, T, S } from '@/theme/tokens';
 interface ScreenHeaderProps {
   title: string;
   subtitle?: string;
+  /** Rendered inline next to the subtitle — e.g. a small status indicator. */
+  subtitleAccessory?: React.ReactNode;
   right?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }
 
-export function ScreenHeader({ title, subtitle, right, style }: ScreenHeaderProps) {
+export function ScreenHeader({ title, subtitle, subtitleAccessory, right, style }: ScreenHeaderProps) {
   return (
     <View style={[styles.header, style]}>
       <View style={styles.titleBlock}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
+        {subtitle ? (
+          <View style={styles.subtitleRow}>
+            <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+            {subtitleAccessory}
+          </View>
+        ) : null}
       </View>
       {right}
     </View>
@@ -45,9 +52,14 @@ const styles = StyleSheet.create({
     color: C.cream,
     letterSpacing: -0.5,
   },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+    marginTop: 2,
+  },
   subtitle: {
     fontSize: T.sm,
     color: C.ash,
-    marginTop: 2,
   },
 });
