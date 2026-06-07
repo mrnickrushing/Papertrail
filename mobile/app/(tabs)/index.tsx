@@ -30,6 +30,7 @@ import { SkeletonList } from '@/components/SkeletonLoader';
 import { FAB } from '@/components/FAB';
 import { EmptyState } from '@/components/EmptyState';
 import { SwipeableCard } from '@/components/SwipeableCard';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { Colors, Typography, Spacing } from '@/theme';
 import { C, T, S, R } from '@/theme/tokens';
 import type { SearchFilters, DocumentCategory } from '@/types/document';
@@ -430,22 +431,16 @@ export default function VaultScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + Spacing['4'] }]}>
-        {selectionMode ? (
-          <>
-            <Text style={styles.headerTitle}>{selectedIds.size} selected</Text>
+      <ScreenHeader
+        style={{ paddingTop: insets.top + Spacing['4'] }}
+        title={selectionMode ? `${selectedIds.size} selected` : 'FileTrail'}
+        subtitle={selectionMode ? undefined : `${visibleDocuments.length} document${visibleDocuments.length !== 1 ? 's' : ''}`}
+        right={
+          selectionMode ? (
             <Pressable onPress={selectAll} hitSlop={8}>
               <Text style={styles.selectAllBtn}>Select All</Text>
             </Pressable>
-          </>
-        ) : (
-          <>
-            <View>
-              <Text style={styles.headerTitle}>FileTrail</Text>
-              <Text style={styles.headerSub}>
-                {visibleDocuments.length} document{visibleDocuments.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
+          ) : (
             <View style={styles.headerControls}>
               <Pressable
                 style={styles.headerControlBtn}
@@ -488,9 +483,9 @@ export default function VaultScreen() {
                 <Feather name={viewMode === 'card' ? 'list' : 'grid'} size={15} color={C.ash} />
               </Pressable>
             </View>
-          </>
-        )}
-      </View>
+          )
+        }
+      />
 
       {/* Filter bar */}
       <FilterBar
@@ -751,23 +746,6 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
 
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: Colors.bg },
-  header: {
-    paddingHorizontal: Spacing['6'],
-    paddingBottom: Spacing['3'],
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize:   Typography.xxl,
-    fontWeight: Typography.bold,
-    color:      Colors.text,
-    letterSpacing: -0.5,
-  },
-  headerSub: {
-    fontSize:  Typography.sm,
-    color:     Colors.textMuted,
-  },
   selectAllBtn: {
     fontSize: T.base,
     color: C.amber,

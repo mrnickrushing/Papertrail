@@ -28,6 +28,7 @@ import { useDocumentStore, useProStore } from '@/store';
 import { PaywallModal } from '@/components/PaywallModal';
 import { DocumentCard } from '@/components/DocumentCard';
 import { EmptyState } from '@/components/EmptyState';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { FAB } from '@/components/FAB';
 import { SkeletonList } from '@/components/SkeletonLoader';
 import { C, T, R, S } from '@/theme/tokens';
@@ -223,12 +224,14 @@ export default function FoldersScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.screenTitle}>Folders</Text>
-        <Pressable style={styles.newFolderBtn} onPress={openCreate}>
-          <Text style={styles.newFolderBtnText}>+ New</Text>
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Folders"
+        right={
+          <Pressable style={styles.newFolderBtn} onPress={openCreate}>
+            <Text style={styles.newFolderBtnText}>+ New</Text>
+          </Pressable>
+        }
+      />
 
       {isLoading && folders.length === 0 ? (
         <SkeletonList count={4} />
@@ -401,7 +404,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.ink3,
   },
-  screenTitle: { fontSize: T.xl, fontWeight: '700', color: C.cream },
   newFolderBtn: {
     backgroundColor: C.amberDim,
     borderRadius: R.full,

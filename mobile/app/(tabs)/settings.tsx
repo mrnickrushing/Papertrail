@@ -27,6 +27,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDocumentStore, useAppStore, useProStore } from '@/store';
 import { PaywallModal } from '@/components/PaywallModal';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { deleteDocumentFiles } from '@/services/fileStorage';
 import { exportAllAsZip } from '@/services/exportService';
 import { createBackup, restoreBackup } from '@/services/backupService';
@@ -340,9 +341,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Text style={styles.screenTitle}>Settings</Text>
-      </View>
+      <ScreenHeader title="Settings" />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
@@ -714,8 +713,6 @@ function spendWarning(amount: number): { tone: 'amber' | 'danger'; message: stri
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.ink1 },
-  header: { paddingHorizontal: S[4], paddingVertical: S[4], borderBottomWidth: 1, borderBottomColor: C.ink3 },
-  screenTitle: { fontSize: T.xl, fontWeight: '700', color: C.cream },
   content: { padding: S[4], gap: S[2] },
   sectionHeader: {
     fontSize: T.xs, fontWeight: '600', color: C.ash,
