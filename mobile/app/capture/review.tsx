@@ -31,6 +31,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system';
 import { nanoid } from 'nanoid/non-secure';
+import * as Haptics from 'expo-haptics';
 import { useAppStore, useDocumentStore, useProStore, FREE_DOCUMENT_LIMIT } from '@/store';
 import { PaywallModal } from '@/components/PaywallModal';
 import { saveDocumentFile, generateThumbnail, getFileSize, getExtension } from '@/services/fileStorage';
@@ -80,6 +81,36 @@ async function resolveFileSize(uri: string | undefined, reportedBytes: number): 
   if (reportedBytes > 0) return reportedBytes;
   if (!uri) return 0;
   return getFileSize(uri);
+}
+
+function describeOcrResult(text: string | null): string {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return 'No text detected';
+  return `${trimmed.split(/\s+/).length} words extracted`;
+}
+
+type OcrStatusDisplay =
+  | { kind: 'spinner'; label: string }
+  | { kind: 'done'; icon: string; label: string }
+  | { kind: 'muted'; label: string }
+  | null;
+
+/** Single source of truth for the OCR/AI status row — collapses what was
+ * 7 overlapping ocrStatus×aiStatus JSX conditionals into one lookup. */
+function getOcrStatusDisplay(
+  ocrStatus: 'idle' | 'processing' | 'done' | 'unavailable',
+  aiStatus: 'idle' | 'processing' | 'done',
+  ocrText: string | null,
+  isPro: boolean
+): OcrStatusDisplay {
+  if (ocrStatus === 'processing') return { kind: 'spinner', label: 'Extracting text…' };
+  if (aiStatus === 'processing') {
+    return { kind: 'spinner', label: ocrStatus === 'done' ? 'AI analysing document…' : 'AI analysing…' };
+  }
+  if (aiStatus === 'done') return { kind: 'done', icon: '✦', label: 'AI filled title, category, and tags' };
+  if (ocrStatus === 'done') return { kind: 'done', icon: '✓', label: describeOcrResult(ocrText) };
+  if (ocrStatus === 'unavailable' && !isPro) return { kind: 'muted', label: 'AI available with Pro' };
+  return null;
 }
 
 export default function DocumentReviewScreen() {
@@ -379,6 +410,7 @@ export default function DocumentReviewScreen() {
       // router.replace() with a root-level href properly unmounts the modal.
       // Confirmed working; do not change to dismissAll/dismiss without retesting.
       if (isMounted.current) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(`/viewer/${documentId}`);
       }
     } catch (err) {
@@ -389,6 +421,7 @@ export default function DocumentReviewScreen() {
   }, [params, title, category, suggestedTags, ocrText, ocrStatus, addDocument, isSaving, documents.length, isPro, suggestedAiSource, suggestedDate, suggestedVendor, suggestedAmounts]);
 
   const isImage = !isPDFLike(params.uri ?? '', params.mimeType);
+  const ocrStatusDisplay = getOcrStatusDisplay(ocrStatus, aiStatus, ocrText, isPro);
 
   return (
     <KeyboardAvoidingView
@@ -440,46 +473,20 @@ export default function DocumentReviewScreen() {
 
         {/* OCR + AI Status */}
         <View style={styles.ocrRow}>
-          {ocrStatus === 'processing' && (
+          {ocrStatusDisplay?.kind === 'spinner' && (
             <>
               <ActivityIndicator size="small" color={C.amber} style={{ marginRight: S[2] }} />
-              <Text style={styles.ocrText}>Extracting text…</Text>
+              <Text style={styles.ocrText}>{ocrStatusDisplay.label}</Text>
             </>
           )}
-          {ocrStatus === 'done' && aiStatus === 'processing' && (
+          {ocrStatusDisplay?.kind === 'done' && (
             <>
-              <ActivityIndicator size="small" color={C.amber} style={{ marginRight: S[2] }} />
-              <Text style={styles.ocrText}>AI analysing document…</Text>
+              <Text style={styles.ocrDot}>{ocrStatusDisplay.icon}</Text>
+              <Text style={styles.ocrText}>{ocrStatusDisplay.label}</Text>
             </>
           )}
-          {ocrStatus === 'done' && aiStatus === 'done' && (
-            <>
-              <Text style={styles.ocrDot}>✦</Text>
-              <Text style={styles.ocrText}>AI filled title, category, and tags</Text>
-            </>
-          )}
-          {ocrStatus === 'done' && aiStatus === 'idle' && (
-            <>
-              <Text style={styles.ocrDot}>✓</Text>
-              <Text style={styles.ocrText}>
-                {ocrText ? `${ocrText.split(/\s+/).length} words extracted` : 'No text found'}
-              </Text>
-            </>
-          )}
-          {ocrStatus === 'unavailable' && aiStatus === 'processing' && (
-            <>
-              <ActivityIndicator size="small" color={C.amber} style={{ marginRight: S[2] }} />
-              <Text style={styles.ocrText}>AI analysing…</Text>
-            </>
-          )}
-          {ocrStatus === 'unavailable' && aiStatus === 'done' && (
-            <>
-              <Text style={styles.ocrDot}>✦</Text>
-              <Text style={styles.ocrText}>AI filled title, category, and tags</Text>
-            </>
-          )}
-          {ocrStatus === 'unavailable' && aiStatus === 'idle' && !isPro && (
-            <Text style={styles.ocrMuted}>AI available with Pro</Text>
+          {ocrStatusDisplay?.kind === 'muted' && (
+            <Text style={styles.ocrMuted}>{ocrStatusDisplay.label}</Text>
           )}
         </View>
 

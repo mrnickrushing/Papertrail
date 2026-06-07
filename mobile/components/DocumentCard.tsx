@@ -167,6 +167,9 @@ export function DocumentCard({
             {document.ocrStatus === 'failed' && (
               <Feather name="alert-triangle" size={16} color={C.danger} style={styles.ocrFailedIcon} />
             )}
+            {document.isFavorite && (
+              <Feather name="star" size={15} color={C.amber} style={styles.favStar} />
+            )}
           </View>
 
           <View style={styles.metaRow}>
@@ -181,12 +184,6 @@ export function DocumentCard({
           </View>
 
           <View style={styles.footerRow}>
-            {document.isFavorite && (
-              <View style={styles.favPill}>
-                <Feather name="star" size={11} color={C.amber} />
-                <Text style={styles.favPillText}>Saved</Text>
-              </View>
-            )}
             {document.tags.slice(0, 2).map((tag) => (
               <View key={tag} style={styles.tagPill}>
                 <Text style={styles.tagPillText}>#{tag}</Text>
@@ -314,6 +311,9 @@ const styles = StyleSheet.create({
   ocrFailedIcon: {
     marginTop: 2,
   },
+  favStar: {
+    marginTop: 2,
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -345,16 +345,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: S[1],
   },
-  favPill: {
-    backgroundColor: C.amberDim,
-    borderRadius: R.full,
-    paddingHorizontal: S[2],
-    paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  favPillText: { fontSize: T.xs, color: C.amber, fontWeight: '600' },
   tagPill: {
     backgroundColor: C.ink3,
     borderRadius: R.full,
