@@ -36,25 +36,34 @@ interface Props {
 export function SwipeableCard({ children, onDelete, onFavorite, isFavorite, disabled }: Props) {
   const translateX = useSharedValue(0);
   const hasFired = useSharedValue(false);
+  const isConfirmingDelete = useSharedValue(false);
 
   const hapticLight = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
+  const resetPosition = useCallback(() => {
+    isConfirmingDelete.value = false;
+    translateX.value = withSpring(0);
+  }, [translateX, isConfirmingDelete]);
+
+  // Keep the card swiped-out behind the confirm alert — snapping it back
+  // immediately made the doc look "un-deleted" before the user chose.
   const confirmDelete = useCallback(() => {
     Alert.alert(
       'Delete Document',
       'This document will be permanently deleted.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: resetPosition },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: onDelete,
         },
-      ]
+      ],
+      { onDismiss: resetPosition }
     );
-  }, [onDelete]);
+  }, [onDelete, resetPosition]);
 
   const pan = Gesture.Pan()
     .enabled(!disabled)
@@ -76,7 +85,8 @@ export function SwipeableCard({ children, onDelete, onFavorite, isFavorite, disa
         translateX.value = 0;
         runOnJS(onFavorite)();
       } else if (e.translationX <= -ACTION_THRESHOLD) {
-        translateX.value = 0;
+        // Stay swiped-out — confirmDelete resets position once the alert resolves
+        isConfirmingDelete.value = true;
         runOnJS(confirmDelete)();
       } else {
         translateX.value = withSpring(0);
@@ -84,7 +94,9 @@ export function SwipeableCard({ children, onDelete, onFavorite, isFavorite, disa
     })
     .onFinalize(() => {
       hasFired.value = false;
-      translateX.value = withSpring(0);
+      if (!isConfirmingDelete.value) {
+        translateX.value = withSpring(0);
+      }
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
