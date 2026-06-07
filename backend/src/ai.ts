@@ -15,7 +15,7 @@ const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
   ['contract', /\b(contract|agreement|signature|party|terms|stipulation|judgment|decree|counsel|plaintiff|defendant|attorney|lawsuit|affidavit|docket|subpoena|deposition)\b/i],
   ['id', /\b(driver|license|passport|identification|dob)\b/i],
   ['warranty', /\b(warranty|serial|coverage|expires)\b/i],
-  ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx|emergency|urgent care)\b|\bE\.?R\.?\b/i],
+  ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx|emergency|urgent care|panel|specimen|lab(?:oratory)?|glucose|cholesterol|triglycerides?|hdl|ldl|hemoglobin|a1c|metabolic|lipid|blood (?:work|test|count)|reference range|physician|provider|doctor|prescri\w*)\b|\bE\.?R\.?\b/i],
   ['tax', /\b(tax|irs|w-?2|1099|deduction|return)\b/i],
 ];
 
@@ -283,7 +283,8 @@ export async function suggestDocument(input: {
       : undefined;
 
     return { suggestedTitle, suggestedFolderName, suggestedSubfolderName, category, tags, notes, date, vendor, amounts, source: 'claude' };
-  } catch {
+  } catch (err) {
+    console.error('[ai.suggestDocument] Claude call failed, falling back to heuristics:', err instanceof Error ? err.message : err);
     return heuristicSuggest({ ...input, ocrText: input.ocrText?.trim() });
   }
 }
