@@ -419,6 +419,17 @@ export default function SettingsScreen() {
         <Text style={styles.hint}>
           Estimated cost of Claude API calls made for AI Organize on this device, based on Claude Haiku pricing.
         </Text>
+        {(() => {
+          const warning = spendWarning(aiUsageCostUsd);
+          if (!warning) return null;
+          return (
+            <View style={[styles.spendWarning, warning.tone === 'danger' && styles.spendWarningDanger]}>
+              <Text style={[styles.spendWarningText, warning.tone === 'danger' && styles.spendWarningTextDanger]}>
+                {warning.message}
+              </Text>
+            </View>
+          );
+        })()}
 
         {/* Account */}
         <SectionHeader title="Account" />
@@ -690,6 +701,17 @@ function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+/** Soft heads-up once on-device AI spend crosses friendly checkpoints. */
+function spendWarning(amount: number): { tone: 'amber' | 'danger'; message: string } | null {
+  if (amount >= 5) {
+    return { tone: 'danger', message: `You’ve spent ${formatUsd(amount)} on AI Organize on this device — keep an eye on it.` };
+  }
+  if (amount >= 1) {
+    return { tone: 'amber', message: `You’ve crossed ${formatUsd(amount)} in AI Organize spend on this device.` };
+  }
+  return null;
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.ink1 },
   header: { paddingHorizontal: S[4], paddingVertical: S[4], borderBottomWidth: 1, borderBottomColor: C.ink3 },
@@ -722,6 +744,17 @@ const styles = StyleSheet.create({
   actionSub: { fontSize: T.sm, color: C.ash },
   actionChevron: { fontSize: 22, color: C.ash },
   hint: { fontSize: T.xs, color: C.ink4, marginHorizontal: S[2], marginBottom: S[2], lineHeight: 18 },
+  spendWarning: {
+    backgroundColor: C.amberDim,
+    borderRadius: R.md,
+    paddingHorizontal: S[3],
+    paddingVertical: S[2] + 2,
+    marginHorizontal: S[2],
+    marginBottom: S[3],
+  },
+  spendWarningDanger: { backgroundColor: C.danger + '22' },
+  spendWarningText: { fontSize: T.xs, color: C.amber, fontWeight: '600', lineHeight: 18 },
+  spendWarningTextDanger: { color: C.danger },
   footer: { fontSize: T.sm, color: C.ink4, textAlign: 'center', marginTop: S[6], lineHeight: 20 },
   proCard: {
     backgroundColor: C.ink2,
