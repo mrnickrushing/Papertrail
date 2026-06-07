@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
-import { useDocumentStore } from '@/store/documentStore';
+import { useDocumentStore } from '@/store';
 import { DocumentCard } from '@/components/DocumentCard';
 import {
   getRecentSearches,

@@ -24,8 +24,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useDocumentStore } from '@/store/documentStore';
-import { useProStore } from '@/store/proStore';
+import { useDocumentStore, useProStore } from '@/store';
 import { PaywallModal } from '@/components/PaywallModal';
 import { DocumentCard } from '@/components/DocumentCard';
 import { EmptyState } from '@/components/EmptyState';

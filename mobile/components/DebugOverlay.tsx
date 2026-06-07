@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useDebugStore } from '@/store/debugStore';
+import { useDebugStore } from '@/store';
 import { C, R, S } from '@/theme/tokens';
 
 type DebugOverlayProps = {

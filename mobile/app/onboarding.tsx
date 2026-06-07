@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppStore } from '@/store/appStore';
+import { useAppStore } from '@/store';
 import { track } from '@/services/analytics';
 import { C, T, S, R } from '@/theme/tokens';
 

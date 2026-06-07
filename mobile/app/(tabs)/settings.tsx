@@ -25,9 +25,7 @@ import {
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useDocumentStore } from '@/store/documentStore';
-import { useAppStore } from '@/store/appStore';
-import { useProStore } from '@/store/proStore';
+import { useDocumentStore, useAppStore, useProStore } from '@/store';
 import { PaywallModal } from '@/components/PaywallModal';
 import { deleteDocumentFiles } from '@/services/fileStorage';
 import { exportAllAsZip } from '@/services/exportService';

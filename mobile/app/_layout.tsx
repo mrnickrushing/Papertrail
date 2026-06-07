@@ -6,14 +6,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { Colors } from '@/theme';
-import { useDocumentStore } from '@/store/documentStore';
-import { useAppStore } from '@/store/appStore';
+import { useDocumentStore, useAppStore, useProStore, useDebugStore } from '@/store';
 import { LockScreen } from '@/components/LockScreen';
 import { track } from '@/services/analytics';
 import { getApiBaseUrl } from '@/services/api';
 import { initializePurchases } from '@/services/purchases';
-import { useProStore } from '@/store/proStore';
-import { useDebugStore } from '@/store/debugStore';
 
 SplashScreen.preventAutoHideAsync();
 

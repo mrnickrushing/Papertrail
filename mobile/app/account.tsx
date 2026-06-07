@@ -14,8 +14,7 @@ import {
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { useAppStore } from '@/store/appStore';
-import { useProStore } from '@/store/proStore';
+import { useAppStore, useProStore } from '@/store';
 import {
   getAdminProfileDefaults,
   isAdminBypassConfigured,
