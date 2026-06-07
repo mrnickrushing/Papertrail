@@ -81,6 +81,7 @@ export default function DocumentReviewScreen() {
   const folders = useDocumentStore(s => s.folders);
   const documents = useDocumentStore(s => s.documents);
   const autoOcr = useAppStore(s => s.autoOcr);
+  const recordAiUsageCost = useAppStore(s => s.recordAiUsageCost);
   const isPro = useProStore(s => s.isPro);
   const checkPro = useProStore(s => s.checkPro);
 
@@ -135,6 +136,7 @@ export default function DocumentReviewScreen() {
           date?: string;
           vendor?: string;
           amounts?: number[];
+          usage?: { inputTokens: number; outputTokens: number; costUsd: number };
         }>('/v1/ai/suggest-document', {
           method: 'POST',
           body: { title, filename: params.name, mimeType: params.mimeType, pdfBase64, anthropicApiKey: getAnthropicApiKey() ?? undefined, existingFolders: folders.filter(f => !f.parentId).map(f => f.name) },
@@ -151,6 +153,7 @@ export default function DocumentReviewScreen() {
             if (suggestion.date) setSuggestedDate(suggestion.date);
             if (suggestion.vendor) setSuggestedVendor(suggestion.vendor);
             if (Array.isArray(suggestion.amounts)) setSuggestedAmounts(suggestion.amounts);
+            if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
             setAiStatus('done');
           })
           .catch(() => {
@@ -174,6 +177,7 @@ export default function DocumentReviewScreen() {
       date?: string;
       vendor?: string;
       amounts?: number[];
+      usage?: { inputTokens: number; outputTokens: number; costUsd: number };
     }) => {
       if (suggestion.suggestedTitle) setTitle(suggestion.suggestedTitle);
       if (suggestion.category) setCategory(suggestion.category);
@@ -185,6 +189,7 @@ export default function DocumentReviewScreen() {
       if (suggestion.date) setSuggestedDate(suggestion.date);
       if (suggestion.vendor) setSuggestedVendor(suggestion.vendor);
       if (Array.isArray(suggestion.amounts)) setSuggestedAmounts(suggestion.amounts);
+      if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
     };
 
     if (!autoOcr || !isOCRAvailable()) {
@@ -201,6 +206,7 @@ export default function DocumentReviewScreen() {
             tags: string[]; notes: string; suggestedFolderName: string;
             suggestedSubfolderName?: string;
             source?: string; date?: string; vendor?: string; amounts?: number[];
+            usage?: { inputTokens: number; outputTokens: number; costUsd: number };
           }>('/v1/ai/suggest-document', {
             method: 'POST',
             body: { title, filename: params.name, mimeType: params.mimeType, imageBase64, imageMimeType: imageBase64 ? params.mimeType : undefined, anthropicApiKey: getAnthropicApiKey() ?? undefined, existingFolders: folders.filter(f => !f.parentId).map(f => f.name) },
@@ -236,6 +242,7 @@ export default function DocumentReviewScreen() {
               tags: string[]; notes: string; suggestedFolderName: string;
               suggestedSubfolderName?: string;
               source?: string; date?: string; vendor?: string; amounts?: number[];
+              usage?: { inputTokens: number; outputTokens: number; costUsd: number };
             }>('/v1/ai/suggest-document', {
               method: 'POST',
               body: {

@@ -94,6 +94,7 @@ export default function VaultScreen() {
   const setViewMode = useAppStore(s => s.setViewMode);
   const hasOnboarded = useAppStore(s => s.hasOnboarded);
   const isAccountAuthenticated = useAppStore(s => s.isAccountAuthenticated);
+  const recordAiUsageCost = useAppStore(s => s.recordAiUsageCost);
 
   const isPro = useProStore(s => s.isPro);
   const checkPro = useProStore(s => s.checkPro);
@@ -283,6 +284,7 @@ export default function VaultScreen() {
                   date?: string;
                   vendor?: string;
                   amounts?: number[];
+                  usage?: { inputTokens: number; outputTokens: number; costUsd: number };
                 }>('/v1/ai/suggest-document', {
                   method: 'POST',
                   body: {
@@ -318,6 +320,7 @@ export default function VaultScreen() {
                 if (typeof suggestion.date === 'string' && suggestion.date) aiPatch.inferredDate = suggestion.date;
                 if (typeof suggestion.vendor === 'string' && suggestion.vendor) aiPatch.vendor = suggestion.vendor;
                 if (Array.isArray(suggestion.amounts) && suggestion.amounts.length > 0) aiPatch.amounts = suggestion.amounts;
+                if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
                 updateDocument(docId, aiPatch as any);
                 if (suggestion.suggestedFolderName) {
                   const nameLower = suggestion.suggestedFolderName.toLowerCase();

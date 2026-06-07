@@ -59,6 +59,9 @@ export default function SettingsScreen() {
   const clearAccountSession = useAppStore(s => s.clearAccountSession);
   const clearAccountProfile = useAppStore(s => s.clearAccountProfile);
 
+  const aiUsageCostUsd = useAppStore(s => s.aiUsageCostUsd);
+  const aiUsageCallCount = useAppStore(s => s.aiUsageCallCount);
+
   const isPro = useProStore(s => s.isPro);
   const checkPro = useProStore(s => s.checkPro);
   const hasAdminAccess = useProStore(s => s.hasAdminAccess);
@@ -355,6 +358,17 @@ export default function SettingsScreen() {
           <SettingsRow label="Disk Usage" value={formatBytes(totalSize)} />
         </View>
 
+        {/* AI Usage */}
+        <SectionHeader title="AI Usage" />
+        <View style={styles.card}>
+          <SettingsRow label="Estimated Spend" value={formatUsd(aiUsageCostUsd)} />
+          <Divider />
+          <SettingsRow label="AI Calls" value={`${aiUsageCallCount}`} />
+        </View>
+        <Text style={styles.hint}>
+          Estimated cost of Claude API calls made for AI Organize on this device, based on Claude Haiku pricing.
+        </Text>
+
         {/* Account */}
         <SectionHeader title="Account" />
         <View style={styles.card}>
@@ -617,6 +631,12 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatUsd(amount: number): string {
+  if (amount === 0) return '$0.00';
+  if (amount < 0.01) return `$${amount.toFixed(4)}`;
+  return `$${amount.toFixed(2)}`;
 }
 
 const styles = StyleSheet.create({

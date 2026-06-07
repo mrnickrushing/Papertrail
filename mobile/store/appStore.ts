@@ -39,6 +39,10 @@ interface AppState {
   // Pro
   isPro: boolean;
 
+  // AI usage — running total of estimated Claude API spend on this device
+  aiUsageCostUsd: number;
+  aiUsageCallCount: number;
+
   // Actions
   setHasHydrated: (hydrated: boolean) => void;
   setLocked: (locked: boolean) => void;
@@ -53,6 +57,7 @@ interface AppState {
   setSortDir: (dir: 'asc' | 'desc') => void;
   setAutoOcr: (enabled: boolean) => void;
   setIsPro: (v: boolean) => void;
+  recordAiUsageCost: (costUsd: number) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -69,6 +74,8 @@ export const useAppStore = create<AppState>()(
       sortDir: 'desc',
       autoOcr: true,
       isPro: false,
+      aiUsageCostUsd: 0,
+      aiUsageCallCount: 0,
 
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       setLocked: (isLocked) => set({ isLocked }),
@@ -89,6 +96,10 @@ export const useAppStore = create<AppState>()(
       setSortDir: (sortDir) => set({ sortDir }),
       setAutoOcr: (autoOcr) => set({ autoOcr }),
       setIsPro: (isPro) => set({ isPro }),
+      recordAiUsageCost: (costUsd) => set((state) => ({
+        aiUsageCostUsd: state.aiUsageCostUsd + costUsd,
+        aiUsageCallCount: state.aiUsageCallCount + 1,
+      })),
     }),
     {
       name: 'filetrail-app-settings-v1',
@@ -104,6 +115,8 @@ export const useAppStore = create<AppState>()(
         sortDir: state.sortDir,
         autoOcr: state.autoOcr,
         isPro: state.isPro,
+        aiUsageCostUsd: state.aiUsageCostUsd,
+        aiUsageCallCount: state.aiUsageCallCount,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

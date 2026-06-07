@@ -6,6 +6,14 @@ import type { DocumentCategory } from './types.js';
 
 const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-haiku-4-5-20251001';
 
+// Claude Haiku 4.5 pricing — used to estimate the cost of each AI classification call.
+const INPUT_COST_PER_MTOK = 1.00;
+const OUTPUT_COST_PER_MTOK = 5.00;
+
+function calcCostUsd(inputTokens: number, outputTokens: number): number {
+  return (inputTokens / 1_000_000) * INPUT_COST_PER_MTOK + (outputTokens / 1_000_000) * OUTPUT_COST_PER_MTOK;
+}
+
 const VALID_CATEGORIES: DocumentCategory[] = [
   'receipt', 'bill', 'contract', 'id', 'warranty', 'medical', 'tax', 'other',
 ];
@@ -46,6 +54,7 @@ type SuggestResult = {
   vendor?: string;
   amounts?: number[];
   source: 'heuristic' | 'claude';
+  usage?: { inputTokens: number; outputTokens: number; costUsd: number };
 };
 
 /** Detect auto-generated fallback titles — heuristic format OR generateTitle() format from the mobile app. */
@@ -198,6 +207,7 @@ export async function suggestDocument(input: {
     const client = new Anthropic({ apiKey });
     const schemaPrompt = buildSchemaPrompt(input.existingFolders);
     let rawText = '';
+    let usage: { input_tokens: number; output_tokens: number } | undefined;
 
     if (hasPdf) {
       // Send the PDF directly — Claude reads it natively without text extraction
@@ -214,6 +224,7 @@ export async function suggestDocument(input: {
         }],
       });
       rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      usage = response.usage;
 
     } else if (hasImage) {
       // Send the image directly — Claude reads it with vision
@@ -236,6 +247,7 @@ export async function suggestDocument(input: {
         messages: [{ role: 'user', content: contentBlocks as Anthropic.MessageParam['content'] }],
       });
       rawText = response.content[0].type === 'text' ? response.content[0].text : '';
+      usage = response.usage;
 
     } else if (hasOcr) {
       // Text from OCR — no file content available
@@ -246,6 +258,7 @@ export async function suggestDocument(input: {
         messages: [{ role: 'user', content: `${schemaPrompt}\n\nDocument text:\n${ocrText!.slice(0, 2000)}` }],
       });
       rawText = response.content[0].type === 'text' ? response.content[0].text : '';
+      usage = response.usage;
 
     } else {
       // Filename / MIME type only — no file content and no OCR
@@ -259,6 +272,7 @@ export async function suggestDocument(input: {
         }],
       });
       rawText = response.content[0].type === 'text' ? response.content[0].text : '';
+      usage = response.usage;
     }
 
     const parsed = JSON.parse(extractJsonObject(rawText));
@@ -291,7 +305,15 @@ export async function suggestDocument(input: {
       ? parsed.subfolderName.trim().slice(0, 80)
       : undefined;
 
-    return { suggestedTitle, suggestedFolderName, suggestedSubfolderName, category, tags, notes, date, vendor, amounts, source: 'claude' };
+    const usageResult = usage
+      ? {
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          costUsd: calcCostUsd(usage.input_tokens, usage.output_tokens),
+        }
+      : undefined;
+
+    return { suggestedTitle, suggestedFolderName, suggestedSubfolderName, category, tags, notes, date, vendor, amounts, source: 'claude', usage: usageResult };
   } catch (err) {
     console.error('[ai.suggestDocument] Claude call failed, falling back to heuristics:', err instanceof Error ? err.message : err);
     return heuristicSuggest({ ...input, ocrText: input.ocrText?.trim() });

@@ -28,6 +28,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDocumentStore } from '@/store/documentStore';
+import { useAppStore } from '@/store/appStore';
 import { useProStore } from '@/store/proStore';
 import { shareDocument } from '@/services/exportService';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
@@ -128,6 +129,7 @@ export default function DocumentViewerScreen() {
   const deleteDocument = useDocumentStore(s => s.deleteDocument);
   const toggleFavorite = useDocumentStore(s => s.toggleFavorite);
   const isPro = useProStore(s => s.isPro);
+  const recordAiUsageCost = useAppStore(s => s.recordAiUsageCost);
   const checkPro = useProStore(s => s.checkPro);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -298,6 +300,7 @@ export default function DocumentViewerScreen() {
         date?: string;
         vendor?: string;
         amounts?: number[];
+        usage?: { inputTokens: number; outputTokens: number; costUsd: number };
       }>('/v1/ai/suggest-document', {
         method: 'POST',
         body: {
@@ -333,6 +336,7 @@ export default function DocumentViewerScreen() {
       if (suggestion.date) aiPatch.inferredDate = suggestion.date;
       if (suggestion.vendor) aiPatch.vendor = suggestion.vendor;
       if (Array.isArray(suggestion.amounts) && suggestion.amounts.length > 0) aiPatch.amounts = suggestion.amounts;
+      if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
       updateDocument(document.id, aiPatch as Parameters<typeof updateDocument>[1]);
       updateDocumentTags(document.id, nextTags);
 
