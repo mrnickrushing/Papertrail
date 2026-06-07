@@ -1,5 +1,5 @@
 /**
- * backupService.ts — Local encrypted backup & restore (Phase 7)
+ * backupService.ts — Local backup & restore (Phase 7)
  *
  * Free tier: creates a self-contained JSON bundle of all document metadata
  * + base64-encoded files, written to the cache directory and shared via the
@@ -8,9 +8,13 @@
  * Restore: reads the bundle back, re-creates metadata in the store and copies
  * files back into the documents directory.
  *
- * Encryption: XOR with a device-specific key derived from the bundle's
- * creation timestamp + a static salt.  This is intentionally lightweight —
- * full AES encryption is a Pro feature wired to a user passphrase.
+ * NOT encryption: the bundle is XOR-obfuscated with a key whose seed is
+ * embedded in the same file (`PTBAK1:<seed>|<payload>`), so anyone holding
+ * the file can trivially recover it — this only stops the contents from
+ * being readable as plain JSON in a text editor. Treat `.ptbak` files with
+ * the same care as the original documents (e.g. don't upload them to
+ * untrusted storage). Real passphrase-derived AES encryption is tracked as
+ * a future Pro feature once a vetted, on-device crypto primitive is in place.
  */
 
 import * as FileSystem from 'expo-file-system';

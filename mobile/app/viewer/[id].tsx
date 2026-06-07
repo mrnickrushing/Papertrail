@@ -27,6 +27,7 @@ import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useDocumentStore, useAppStore, useProStore } from '@/store';
 import { shareDocument } from '@/services/exportService';
 import { getFileSize } from '@/services/fileStorage';
@@ -507,6 +508,7 @@ export default function DocumentViewerScreen() {
           ) : (
             <PDFViewer
               uri={document.fileUri}
+              filename={document.title}
               page={pdfPage}
               totalPages={pdfTotal}
               onPageChange={setPdfPage}
@@ -787,6 +789,7 @@ export default function DocumentViewerScreen() {
 
 interface PDFViewerProps {
   uri: string;
+  filename: string;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -794,7 +797,7 @@ interface PDFViewerProps {
 }
 
 function PDFViewer({
-  uri, page, totalPages, onPageChange, onOpenExternally,
+  uri, filename, page, totalPages, onPageChange, onOpenExternally,
 }: PDFViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -803,8 +806,11 @@ function PDFViewer({
     return (
       <View style={pdfStyles.container}>
         <View style={pdfStyles.placeholder}>
-          <Text style={pdfStyles.icon}>📄</Text>
+          <View style={pdfStyles.pageOutline}>
+            <Feather name="file-text" size={40} color={C.ash} />
+          </View>
           <Text style={pdfStyles.title}>Couldn't preview this PDF</Text>
+          <Text style={pdfStyles.filename} numberOfLines={1}>{filename}</Text>
           <Text style={pdfStyles.subtitle}>
             The in-app preview couldn't load this file. You can still open it
             in another app to view it.
@@ -928,8 +934,18 @@ const pdfStyles = StyleSheet.create({
     paddingHorizontal: S[6],
     gap: S[3],
   },
-  icon: { fontSize: 48 },
+  pageOutline: {
+    width: 72,
+    height: 88,
+    borderRadius: R.md,
+    borderWidth: 1.5,
+    borderColor: C.ink4,
+    backgroundColor: C.ink2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { fontSize: T.base, color: C.ash, fontWeight: '600', textAlign: 'center' },
+  filename: { fontSize: T.sm, color: C.ink4, textAlign: 'center', maxWidth: 260, marginTop: -S[2] },
   subtitle: {
     fontSize: T.sm,
     color: C.ink4,

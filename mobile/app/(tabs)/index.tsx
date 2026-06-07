@@ -33,7 +33,7 @@ import { SwipeableCard } from '@/components/SwipeableCard';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Colors, Typography, Spacing } from '@/theme';
 import { C, T, S, R } from '@/theme/tokens';
-import type { SearchFilters, DocumentCategory } from '@/types/document';
+import type { SearchFilters, DocumentCategory, Document } from '@/types/document';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -326,7 +326,7 @@ export default function VaultScreen() {
                   : undefined;
                 const mergedTags = Array.from(new Set([...doc.tags, ...nextTags]));
                 updateDocumentTags(docId, mergedTags);
-                const aiPatch: Record<string, unknown> = {
+                const aiPatch: Partial<Document> = {
                   title: nextTitle,
                   category: nextCategory,
                   aiSource: suggestion.source === 'claude' ? 'claude' : 'heuristic',
@@ -337,7 +337,7 @@ export default function VaultScreen() {
                 if (typeof suggestion.vendor === 'string' && suggestion.vendor) aiPatch.vendor = suggestion.vendor;
                 if (Array.isArray(suggestion.amounts) && suggestion.amounts.length > 0) aiPatch.amounts = suggestion.amounts;
                 if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
-                updateDocument(docId, aiPatch as any);
+                updateDocument(docId, aiPatch);
                 if (suggestion.suggestedFolderName) {
                   const parentFolder = findOrCreateFolder(suggestion.suggestedFolderName, undefined, null);
                   if (suggestion.suggestedSubfolderName) {

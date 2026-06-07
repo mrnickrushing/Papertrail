@@ -23,12 +23,12 @@ export const Colors = {
   textFaint:       '#52525C',
   textInverse:     '#0F0F12',
 
-  // Primary Accent — Amber
-  primary:          '#E8A020',
+  // Primary Accent — Amber (slightly desaturated to avoid flare on glossy displays)
+  primary:          '#D9941E',
   primaryHover:     '#C8831A',
   primaryActive:    '#A86012',
   primaryHighlight: '#3A2E18',
-  primaryDim:       'rgba(232,160,32,0.15)',
+  primaryDim:       'rgba(217,148,30,0.15)',
 
   // Semantic
   success:          '#4D9E5A',
@@ -45,7 +45,7 @@ export const Colors = {
   catBill:     '#2E9E8F',
   catContract: '#9B6DD4',
   catID:       '#4D9E5A',
-  catWarranty: '#E8A020',
+  catWarranty: '#D9941E',
   catMedical:  '#D04B4B',
   catTax:      '#D97B2A',
   catWork:       '#5E72C4',

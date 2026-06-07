@@ -501,7 +501,7 @@ export default function SettingsScreen() {
           />
         </View>
         <Text style={styles.hint}>
-          Backups include all document files and metadata. Save the .ptbak file to iCloud, Google Drive, or any location you control.
+          Backups include all document files and metadata. The .ptbak file isn't password-protected, so store it somewhere only you can access — iCloud, Google Drive, or another location you control.
         </Text>
 
         {/* Export */}

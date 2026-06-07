@@ -206,6 +206,33 @@ function buildSnippet(text: string, term: string, windowChars = 120): string {
   return `${start > 0 ? '…' : ''}${raw.replace(re, '<mark>$1</mark>')}${end < text.length ? '…' : ''}`;
 }
 
+// Per-document lowercase cache for search. Keyed by object identity rather
+// than id: every mutation path replaces the Document with a new object
+// (`{ ...doc, ...patch }`), so a stale entry can never be read back — the
+// WeakMap also lets entries for removed/replaced documents be GC'd for free.
+type SearchIndexEntry = {
+  title: string;
+  category: string;
+  tags: string[];
+  ocrText: string | null;
+};
+
+const searchIndexCache = new WeakMap<Document, SearchIndexEntry>();
+
+function getSearchIndex(doc: Document): SearchIndexEntry {
+  let entry = searchIndexCache.get(doc);
+  if (!entry) {
+    entry = {
+      title: doc.title.toLowerCase(),
+      category: doc.category.toLowerCase(),
+      tags: doc.tags.map((tag) => tag.toLowerCase()),
+      ocrText: doc.ocrText ? doc.ocrText.toLowerCase() : null,
+    };
+    searchIndexCache.set(doc, entry);
+  }
+  return entry;
+}
+
 function appendUnique(existing: string[], ids: string[]): string[] {
   const next = new Set(existing);
   for (const id of ids) next.add(id);
@@ -548,15 +575,16 @@ export const useDocumentStore = create<DocumentState>()(
 
         const results: SearchResult[] = [];
         for (const doc of get().documents) {
+          const idx = getSearchIndex(doc);
           const matchedFields: SearchResult['matchedFields'] = [];
           let snippet: string | null = null;
 
-          if (doc.title.toLowerCase().includes(q)) matchedFields.push('title');
-          if (doc.category.toLowerCase().includes(q)) matchedFields.push('category');
-          if (doc.tags.some((tag) => tag.toLowerCase().includes(q))) matchedFields.push('tags');
-          if (doc.ocrText?.toLowerCase().includes(q)) {
+          if (idx.title.includes(q)) matchedFields.push('title');
+          if (idx.category.includes(q)) matchedFields.push('category');
+          if (idx.tags.some((tag) => tag.includes(q))) matchedFields.push('tags');
+          if (idx.ocrText?.includes(q)) {
             matchedFields.push('ocrText');
-            snippet = buildSnippet(doc.ocrText, q);
+            snippet = buildSnippet(doc.ocrText!, q);
           }
 
           if (matchedFields.length > 0) {
