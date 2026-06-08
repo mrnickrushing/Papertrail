@@ -26,17 +26,17 @@ export default function Login({ onLogin }: Props) {
       <div className="login-card">
         <div className="login-logo">
           <h1><span className="amber">FileTrail</span> Admin</h1>
-          <p>Enter your backend API key to continue</p>
+          <p>Enter your <strong>ADMIN_KEY</strong> from Railway to continue</p>
         </div>
         {error && <div className="error-box">{error}</div>}
         <form onSubmit={submit}>
           <div className="form-group">
-            <label>API Key</label>
+            <label>Admin Key</label>
             <input
               type="password"
               value={key}
               onChange={e => setKey(e.target.value)}
-              placeholder="Your Railway API_KEY value"
+              placeholder="Your Railway ADMIN_KEY value"
               autoFocus
             />
           </div>

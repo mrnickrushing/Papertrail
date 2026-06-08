@@ -39,7 +39,7 @@ export default function App() {
       setKeyState(k);
     } catch {
       clearKey();
-      throw new Error('Invalid API key — check your Railway API_KEY env var.');
+      throw new Error('Invalid admin key — check your Railway ADMIN_KEY env var.');
     }
   };
 

@@ -47,7 +47,8 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
   });
 
   app.addHook('preHandler', async (request, reply) => {
-    if (!request.url.startsWith('/v1/') || !config.apiKey) return;
+    // Admin routes have their own ADMIN_KEY hook — skip them here
+    if (!request.url.startsWith('/v1/') || request.url.startsWith('/v1/admin/') || !config.apiKey) return;
     const auth = request.headers.authorization;
     if (auth !== `Bearer ${config.apiKey}`) {
       await reply.code(401).send({ error: 'Unauthorized' });
