@@ -6,6 +6,7 @@ import { after, before, test } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import type { RuntimeConfig } from './config.js';
+import { documentKey } from './r2.js';
 
 let app: FastifyInstance;
 let dataDir: string;
@@ -37,6 +38,27 @@ before(async () => {
 after(async () => {
   await app.close();
   await rm(dataDir, { recursive: true, force: true });
+});
+
+test('documentKey nests under user email with readable folder names', () => {
+  assert.equal(
+    documentKey('doc-1', 'application/pdf', 'Car Insurance 2026', 'User@Example.com'),
+    'user@example.com/Car Insurance 2026/Car Insurance 2026.pdf',
+  );
+});
+
+test('documentKey strips unsafe characters from title and email', () => {
+  assert.equal(
+    documentKey('doc-1', 'image/jpeg', 'Re/ce*ipt: #42', 'jo hn@example.com'),
+    'jo_hn@example.com/Re_ce_ipt_ _42/Re_ce_ipt_ _42.jpeg',
+  );
+});
+
+test('documentKey falls back to legacy path without an email', () => {
+  assert.equal(
+    documentKey('doc-1', 'application/pdf', 'Lease'),
+    'documents/doc-1/Lease.pdf',
+  );
 });
 
 test('health endpoint is public', async () => {
@@ -117,7 +139,7 @@ test('AI suggestion endpoint uses filename when OCR text is missing', async () =
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().category, 'warranty');
   assert.equal(res.json().suggestedTitle, 'Acme Warranty');
-  assert.ok(res.json().tags.includes('pdf'));
+  assert.ok(res.json().tags.includes('warranty'));
 });
 
 test('share links enforce passwords and list created links', async () => {

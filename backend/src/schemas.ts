@@ -39,6 +39,12 @@ export const documentSchema = z.object({
   isFavorite: z.boolean(),
   folderId: z.string().nullable(),
   tags: z.array(z.string()),
+  notes: z.string().optional(),
+  aiSource: z.enum(['heuristic', 'claude']).optional(),
+  aiOrganizedAt: z.string().optional(),
+  // R2 object reference (r2://bucket/key) — must round-trip through sync so
+  // other devices can restore the file from cloud storage.
+  storageUrl: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   syncVersion: z.number().int().nonnegative().optional(),

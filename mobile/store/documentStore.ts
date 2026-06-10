@@ -18,6 +18,7 @@ import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 import { syncMetadata, type Tombstone } from '@/services/syncService';
 import { Colors } from '@/theme';
 import { useProStore } from './proStore';
+import { useAppStore } from './appStore';
 
 const DOCUMENTS_STORE_KEY = 'filetrail-documents-v2';
 
@@ -374,6 +375,7 @@ export const useDocumentStore = create<DocumentState>()(
             localUri: doc.fileUri,
             mimeType: doc.mimeType,
             fileName: doc.title,
+            userEmail: useAppStore.getState().accountProfile?.email,
           }).then((storageUrl) => {
             if (storageUrl) {
               // Patch the storageUrl onto the document without bumping updatedAt
@@ -461,6 +463,7 @@ export const useDocumentStore = create<DocumentState>()(
                 localUri,
                 mimeType: doc.mimeType,
                 fileName: doc.title,
+                userEmail: useAppStore.getState().accountProfile?.email,
               });
               if (storageUrl) {
                 set((s) => ({
@@ -489,7 +492,17 @@ export const useDocumentStore = create<DocumentState>()(
               for (const doc of incoming) {
                 const local = localById.get(doc.id);
                 if (!local || doc.updatedAt > local.updatedAt) {
-                  localById.set(doc.id, { ...local, ...doc });
+                  // fileUri/thumbnailUri are device-local sandbox paths — never
+                  // adopt another device's paths. Keep ours (or leave empty so
+                  // the R2 restore download below fills it in).
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                  const { fileUri: _remoteFile, thumbnailUri: _remoteThumb, ...rest } = doc;
+                  localById.set(doc.id, {
+                    ...local,
+                    ...rest,
+                    fileUri: local?.fileUri ?? '',
+                    thumbnailUri: local?.thumbnailUri ?? null,
+                  });
                 }
               }
               return { documents: Array.from(localById.values()) };
@@ -508,7 +521,7 @@ export const useDocumentStore = create<DocumentState>()(
                   mimeType: doc.mimeType,
                   extension: ext,
                   storageKey: doc.storageUrl
-                    ? doc.storageUrl.replace(/^r2:\/\/[^\/]+\//, '')
+                    ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
                     : undefined,
                 }).then((localUri) => {
                   if (localUri) {

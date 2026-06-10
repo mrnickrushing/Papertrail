@@ -83,28 +83,59 @@ export async function deleteObject(
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
+// Sanitize a path segment: keep alphanumerics, spaces, hyphens, underscores,
+// dots. Collapse runs of unsafe chars into a single underscore.
+function safeSegment(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return (
+    value
+      .trim()
+      .replace(/[^a-zA-Z0-9 ._-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 100) || fallback
+  );
+}
+
+// Sanitize an email for use as the top-level folder. Keeps the @ so the
+// folder reads as the actual address (R2/S3 keys allow @ safely).
+function safeEmailSegment(email: string): string {
+  return (
+    email
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9@._+-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 100) || 'unknown-user'
+  );
+}
+
 /**
  * Derives the R2 object key for a document.
- * Format: documents/{documentId}/{sanitized-title}.{ext}
  *
- * - documentId makes each key globally unique (UUID)
- * - title gives the file a human-readable name in the bucket
+ * With a user email: {email}/{sanitized-title}/{sanitized-title}.{ext}
+ *   - top-level folder is the owner's email address
+ *   - per-document folder carries the human-readable document title
+ *
+ * Without an email (older app builds): documents/{documentId}/{title}.{ext}
+ *   - documentId keeps each key globally unique (UUID)
+ *
+ * Note: title-based keys mean two documents with the exact same title share
+ * a key. The client stores the returned key (storageUrl) per document, so
+ * downloads always resolve, but identical titles will overwrite each other
+ * in the bucket.
  */
 export function documentKey(
   documentId: string,
   mimeType: string,
   title?: string,
+  userEmail?: string,
 ): string {
   const ext = mimeType.split('/')[1]?.split('+')[0] ?? 'bin';
-  // Sanitize title: keep alphanumerics, spaces, hyphens, underscores, dots.
-  // Collapse runs of unsafe chars into a single underscore.
-  const safeName = title
-    ? title
-        .trim()
-        .replace(/[^a-zA-Z0-9 ._-]/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_+|_+$/g, '')
-        .substring(0, 100) || 'document'
-    : 'document';
+  const safeName = safeSegment(title, 'document');
+  if (userEmail) {
+    return `${safeEmailSegment(userEmail)}/${safeName}/${safeName}.${ext}`;
+  }
   return `documents/${documentId}/${safeName}.${ext}`;
 }

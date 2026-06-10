@@ -151,7 +151,8 @@ export async function uploadDocumentToR2(params: {
   documentId: string;
   localUri: string;
   mimeType: string;
-  fileName?: string; // document title — used as the filename in R2
+  fileName?: string; // document title — used as the folder + file name in R2
+  userEmail?: string; // owner's email — used as the top-level folder in R2
 }): Promise<string | null> {
   try {
     const { uploadUrl, storageUrl } = await apiRequest<{
@@ -164,6 +165,7 @@ export async function uploadDocumentToR2(params: {
         documentId: params.documentId,
         mimeType: params.mimeType,
         fileName: params.fileName,
+        userEmail: params.userEmail,
       },
       timeoutMs: 15000,
     });
