@@ -378,11 +378,12 @@ export const useDocumentStore = create<DocumentState>()(
             userEmail: useAppStore.getState().accountProfile?.email,
           }).then((storageUrl) => {
             if (storageUrl) {
-              // Patch the storageUrl onto the document without bumping updatedAt
-              // (it's a storage detail, not user-visible content).
+              // Bump updatedAt so the incremental sync push picks this up —
+              // without it, a doc already pushed this cycle would never send
+              // its cloud key, and other devices couldn't restore the file.
               set((s) => ({
                 documents: s.documents.map((d) =>
-                  d.id === doc.id ? { ...d, storageUrl } : d
+                  d.id === doc.id ? { ...d, storageUrl, updatedAt: nowIso() } : d
                 ),
               }));
             }
@@ -466,10 +467,12 @@ export const useDocumentStore = create<DocumentState>()(
                 userEmail: useAppStore.getState().accountProfile?.email,
               });
               if (storageUrl) {
+                // updatedAt must advance so the push filter below includes
+                // this doc — its old timestamp predates lastPushedAt.
                 set((s) => ({
                   documents: s.documents.map((d) =>
                     d.id === doc.id
-                      ? { ...d, storageUrl, ...(repairedUri ? { fileUri: repairedUri } : {}) }
+                      ? { ...d, storageUrl, updatedAt: nowIso(), ...(repairedUri ? { fileUri: repairedUri } : {}) }
                       : d
                   ),
                 }));
