@@ -299,6 +299,19 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     return { downloadUrl };
   });
 
+  /**
+   * GET /v1/users/pro-status?email=...
+   * Returns whether a registered user has Pro. No auth required — low-sensitivity
+   * lookup used by the mobile app to sync Pro status from the admin panel.
+   */
+  app.get('/v1/users/pro-status', async (request, reply) => {
+    const { email } = request.query as { email?: string };
+    if (!email) return reply.code(400).send({ error: 'email is required' });
+    const user = await store.getUserByEmail(email.toLowerCase().trim());
+    if (!user) return { found: false, isPro: false };
+    return { found: true, isPro: user.isPro };
+  });
+
   app.get('/v1/admin/stats', async () => store.adminStats());
 
   app.get('/v1/admin/users/:id', async (request, reply) => {
