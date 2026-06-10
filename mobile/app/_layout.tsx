@@ -52,6 +52,7 @@ export default function RootLayout() {
   const biometricEnabled = useAppStore(s => s.biometricEnabled);
   const hasOnboarded = useAppStore(s => s.hasOnboarded);
   const isAccountAuthenticated = useAppStore(s => s.isAccountAuthenticated);
+  const accountEmail = useAppStore(s => s.accountProfile?.email);
   const checkPro = useProStore(s => s.checkPro);
   const isLocked = useAppStore(s => s.isLocked);
   const setLocked = useAppStore(s => s.setLocked);
@@ -69,6 +70,8 @@ export default function RootLayout() {
   repairFilePathsRef.current = repairFilePaths;
   const checkProRef = useRef(checkPro);
   checkProRef.current = checkPro;
+  const accountEmailRef = useRef(accountEmail);
+  accountEmailRef.current = accountEmail;
 
   useEffect(() => {
     // Surface the bundled API base URL so we can tell from the debug overlay
@@ -83,7 +86,7 @@ export default function RootLayout() {
     void repairFilePathsRef.current().catch(() => undefined);
     void syncWithBackendRef.current().catch(() => undefined);
     initializePurchases();
-    void checkProRef.current();
+    void checkProRef.current(accountEmailRef.current);
     track('app_opened');
   }, [logDebug, setDebugScreenState]);
 

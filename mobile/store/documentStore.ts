@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MMKV } from 'react-native-mmkv';
 import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
+import * as FileSystem from 'expo-file-system';
 import { deleteDocumentFiles, repairStoredUri, uploadDocumentToR2, downloadDocumentFromR2, getExtension } from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 import { syncMetadata, type Tombstone } from '@/services/syncService';
@@ -443,16 +444,30 @@ export const useDocumentStore = create<DocumentState>()(
           // Upload sequentially to avoid hammering presigned URL requests
           for (const doc of missing) {
             try {
+              // Repair stale file URIs left over from a prior install's
+              // container UUID — the underlying file may still exist under
+              // the current sandbox directory with a different prefix.
+              const repairedUri = await repairStoredUri(doc.fileUri);
+              const localUri = repairedUri ?? doc.fileUri;
+
+              // Skip if the file no longer exists locally (deleted outside the
+              // app, or an unrecoverable stale path). It will be retried if the
+              // file reappears.
+              const info = await FileSystem.getInfoAsync(localUri);
+              if (!info.exists) continue;
+
               const storageUrl = await uploadDocumentToR2({
                 documentId: doc.id,
-                localUri: doc.fileUri,
+                localUri,
                 mimeType: doc.mimeType,
                 fileName: doc.title,
               });
               if (storageUrl) {
                 set((s) => ({
                   documents: s.documents.map((d) =>
-                    d.id === doc.id ? { ...d, storageUrl } : d
+                    d.id === doc.id
+                      ? { ...d, storageUrl, ...(repairedUri ? { fileUri: repairedUri } : {}) }
+                      : d
                   ),
                 }));
               }
