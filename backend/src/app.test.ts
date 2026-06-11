@@ -42,15 +42,29 @@ after(async () => {
 
 test('documentKey nests under user email with readable folder names', () => {
   assert.equal(
-    documentKey('doc-1', 'application/pdf', 'Car Insurance 2026', 'User@Example.com'),
-    'user@example.com/Car Insurance 2026/Car Insurance 2026.pdf',
+    documentKey(
+      'doc-1',
+      'application/pdf',
+      'Car Insurance 2026',
+      'User@Example.com',
+      'insurance',
+      'Nicholas Rushing',
+    ),
+    'user@example.com/insurance/Nicholas Rushing/Car Insurance 2026.pdf',
   );
 });
 
 test('documentKey strips unsafe characters from title and email', () => {
   assert.equal(
-    documentKey('doc-1', 'image/jpeg', 'Re/ce*ipt: #42', 'jo hn@example.com'),
-    'jo_hn@example.com/Re_ce_ipt_ _42/Re_ce_ipt_ _42.jpeg',
+    documentKey(
+      'doc-1',
+      'image/jpeg',
+      'Re/ce*ipt: #42',
+      'jo hn@example.com',
+      'Medical Records',
+      'Ni/ck *Rushing',
+    ),
+    'jo_hn@example.com/medical_records/Ni_ck _Rushing/Re_ce_ipt_ _42.jpeg',
   );
 });
 
