@@ -36,6 +36,7 @@ import { HealthRing } from '@/components/HealthRing';
 import { Colors, Typography, Spacing } from '@/theme';
 import { C, T, S, R } from '@/theme/tokens';
 import type { SearchFilters, DocumentCategory, Document } from '@/types/document';
+import type { SyncPhase } from '@/store/documentStore';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -76,6 +77,67 @@ const SORT_ICONS: Record<ReturnType<typeof useAppStore.getState>['sortBy'], Reac
   category: 'tag',
 };
 
+function formatSyncAge(value: string | null): string {
+  if (!value) return 'Not synced yet';
+  const deltaMs = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(deltaMs) || deltaMs < 0) return 'Just now';
+  const minutes = Math.floor(deltaMs / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(value).toLocaleDateString();
+}
+
+function syncBadgeMeta(phase: SyncPhase, pendingCount: number): {
+  label: string;
+  detail: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+  tone: 'success' | 'warning' | 'danger' | 'neutral';
+} {
+  if (phase === 'syncing') {
+    return {
+      label: 'Syncing',
+      detail: pendingCount > 0 ? `${pendingCount} pending` : 'Updating cloud copy',
+      icon: 'refresh-cw',
+      tone: 'warning',
+    };
+  }
+  if (phase === 'error') {
+    return {
+      label: 'Sync failed',
+      detail: pendingCount > 0 ? `${pendingCount} pending` : 'Tap to retry',
+      icon: 'alert-circle',
+      tone: 'danger',
+    };
+  }
+  if (pendingCount > 0) {
+    return {
+      label: 'Needs sync',
+      detail: `${pendingCount} pending`,
+      icon: 'cloud-off',
+      tone: 'warning',
+    };
+  }
+  if (phase === 'success') {
+    return {
+      label: 'Synced',
+      detail: 'Cloud copy current',
+      icon: 'cloud',
+      tone: 'success',
+    };
+  }
+  return {
+    label: 'Local only',
+    detail: 'Pull to sync',
+    icon: 'hard-drive',
+    tone: 'neutral',
+  };
+}
+
 export default function VaultScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -92,12 +154,15 @@ export default function VaultScreen() {
   const bulkMove = useDocumentStore(s => s.bulkMove);
   const bulkSetTags = useDocumentStore(s => s.bulkSetTags);
   const deleteDocument = useDocumentStore(s => s.deleteDocument);
+  const deletedDocumentIds = useDocumentStore(s => s.deletedDocumentIds);
+  const deletedFolderIds = useDocumentStore(s => s.deletedFolderIds);
   const toggleFavorite = useDocumentStore(s => s.toggleFavorite);
   const updateDocument = useDocumentStore(s => s.updateDocument);
   const updateDocumentTags = useDocumentStore(s => s.updateDocumentTags);
   const moveDocumentToFolder = useDocumentStore(s => s.moveDocumentToFolder);
   const findOrCreateFolder = useDocumentStore(s => s.findOrCreateFolder);
   const syncWithBackend = useDocumentStore(s => s.syncWithBackend);
+  const syncState = useDocumentStore(s => s.syncState);
 
   const sortBy = useAppStore(s => s.sortBy);
   const sortDir = useAppStore(s => s.sortDir);
@@ -159,6 +224,22 @@ export default function VaultScreen() {
     });
     return docs;
   }, [documents, filters, sortBy, sortDir]);
+
+  const pendingSyncCount = useMemo(() => {
+    const lastSuccessful = syncState.lastSuccessfulSyncAt;
+    const pendingDocs = lastSuccessful
+      ? documents.filter((doc) => doc.updatedAt > lastSuccessful).length
+      : documents.length;
+    const pendingFolders = lastSuccessful
+      ? folders.filter((folder) => folder.updatedAt > lastSuccessful).length
+      : folders.length;
+    return pendingDocs + pendingFolders + deletedDocumentIds.length + deletedFolderIds.length;
+  }, [documents, folders, deletedDocumentIds.length, deletedFolderIds.length, syncState.lastSuccessfulSyncAt]);
+
+  const syncMeta = useMemo(
+    () => syncBadgeMeta(syncState.phase, pendingSyncCount),
+    [syncState.phase, pendingSyncCount],
+  );
 
   // Docs without a folder
   const unfiledCount = useMemo(
@@ -509,6 +590,41 @@ export default function VaultScreen() {
       />
 
       {/* Filter bar */}
+      {!selectionMode && (
+        <Pressable
+          style={[
+            styles.syncBadge,
+            syncMeta.tone === 'success' && styles.syncBadgeSuccess,
+            syncMeta.tone === 'warning' && styles.syncBadgeWarning,
+            syncMeta.tone === 'danger' && styles.syncBadgeDanger,
+          ]}
+          onPress={() => {
+            if (syncState.phase === 'syncing') return;
+            void onRefresh();
+          }}
+          disabled={syncState.phase === 'syncing'}
+          accessibilityRole="button"
+          accessibilityLabel={`${syncMeta.label}. ${syncMeta.detail}. Last sync ${formatSyncAge(syncState.lastSuccessfulSyncAt)}.`}
+        >
+          <View style={styles.syncBadgeMain}>
+            <Feather name={syncMeta.icon} size={14} color={syncMeta.tone === 'success' ? C.success : syncMeta.tone === 'danger' ? C.danger : syncMeta.tone === 'warning' ? C.amber : C.ash} />
+            <Text
+              style={[
+                styles.syncBadgeLabel,
+                syncMeta.tone === 'success' && styles.syncBadgeLabelSuccess,
+                syncMeta.tone === 'warning' && styles.syncBadgeLabelWarning,
+                syncMeta.tone === 'danger' && styles.syncBadgeLabelDanger,
+              ]}
+            >
+              {syncMeta.label}
+            </Text>
+          </View>
+          <Text style={styles.syncBadgeDetail}>
+            {syncMeta.detail} • {formatSyncAge(syncState.lastSuccessfulSyncAt)}
+          </Text>
+        </Pressable>
+      )}
+
       <FilterBar
         filters={filters}
         allTags={allTags}
@@ -848,6 +964,58 @@ const styles = StyleSheet.create({
     color:      Colors.textMuted,
   },
   chipTagTextActive: { color: C.amber },
+  syncBadge: {
+    marginHorizontal: Spacing['4'],
+    marginBottom: Spacing['3'],
+    paddingHorizontal: S[3],
+    paddingVertical: S[2],
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.ink3,
+    backgroundColor: C.ink2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S[3],
+  },
+  syncBadgeSuccess: {
+    backgroundColor: C.success + '14',
+    borderColor: C.success + '33',
+  },
+  syncBadgeWarning: {
+    backgroundColor: C.amberDim,
+    borderColor: C.amber + '33',
+  },
+  syncBadgeDanger: {
+    backgroundColor: C.danger + '14',
+    borderColor: C.danger + '33',
+  },
+  syncBadgeMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+    minWidth: 0,
+  },
+  syncBadgeLabel: {
+    fontSize: T.sm,
+    fontWeight: '700',
+    color: C.cream,
+  },
+  syncBadgeLabelSuccess: {
+    color: C.success,
+  },
+  syncBadgeLabelWarning: {
+    color: C.amber,
+  },
+  syncBadgeLabelDanger: {
+    color: C.danger,
+  },
+  syncBadgeDetail: {
+    flexShrink: 1,
+    fontSize: T.xs,
+    color: C.ash,
+    textAlign: 'right',
+  },
   unfiledBanner: {
     flexDirection: 'row',
     alignItems: 'center',

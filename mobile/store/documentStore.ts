@@ -89,6 +89,15 @@ const OCR_STATUSES = new Set<Document['ocrStatus']>([
   'unavailable',
 ]);
 
+export type SyncPhase = 'idle' | 'syncing' | 'success' | 'error';
+
+export type SyncState = {
+  phase: SyncPhase;
+  lastSuccessfulSyncAt: string | null;
+  lastAttemptedSyncAt: string | null;
+  lastError: string | null;
+};
+
 interface DocumentState {
   documents: Document[];
   folders: Folder[];
@@ -97,6 +106,7 @@ interface DocumentState {
   isLoading: boolean;
   error: string | null;
   filters: SearchFilters;
+  syncState: SyncState;
 
   // Compatibility no-ops for screens that refresh from a backing store.
   loadDocuments: () => Promise<void>;
@@ -234,6 +244,25 @@ function sanitizeFolder(value: unknown): Folder | null {
 
 function sanitizePersistedState(value: unknown): Partial<DocumentState> {
   if (!isRecord(value)) return {};
+  const syncState = isRecord(value.syncState)
+    ? {
+      phase:
+        value.syncState.phase === 'syncing' ||
+        value.syncState.phase === 'success' ||
+        value.syncState.phase === 'error'
+          ? value.syncState.phase
+          : 'idle',
+      lastSuccessfulSyncAt:
+        typeof value.syncState.lastSuccessfulSyncAt === 'string'
+          ? value.syncState.lastSuccessfulSyncAt
+          : null,
+      lastAttemptedSyncAt:
+        typeof value.syncState.lastAttemptedSyncAt === 'string'
+          ? value.syncState.lastAttemptedSyncAt
+          : null,
+      lastError: typeof value.syncState.lastError === 'string' ? value.syncState.lastError : null,
+    } satisfies SyncState
+    : undefined;
   return {
     documents: Array.isArray(value.documents)
       ? value.documents.map(sanitizeDocument).filter((doc): doc is Document => doc !== null)
@@ -243,6 +272,7 @@ function sanitizePersistedState(value: unknown): Partial<DocumentState> {
       : [],
     deletedDocumentIds: stringArrayValue(value.deletedDocumentIds),
     deletedFolderIds: stringArrayValue(value.deletedFolderIds),
+    ...(syncState ? { syncState } : {}),
   };
 }
 
@@ -338,6 +368,12 @@ export const useDocumentStore = create<DocumentState>()(
       isLoading: false,
       error: null,
       filters: {},
+      syncState: {
+        phase: 'idle',
+        lastSuccessfulSyncAt: null,
+        lastAttemptedSyncAt: null,
+        lastError: null,
+      },
 
       loadDocuments: async () => undefined,
       loadFolders: async () => undefined,
@@ -448,6 +484,15 @@ export const useDocumentStore = create<DocumentState>()(
       },
 
       syncWithBackend: async () => {
+        set((s) => ({
+          syncState: {
+            ...s.syncState,
+            phase: 'syncing',
+            lastAttemptedSyncAt: nowIso(),
+            lastError: null,
+          },
+        }));
+        try {
         // Before syncing metadata, make sure any local files are actually
         // present in R2. Older builds could leave behind storageUrl metadata
         // even when the object upload never completed, so we verify existence
@@ -620,6 +665,24 @@ export const useDocumentStore = create<DocumentState>()(
             }));
           },
         });
+          set((s) => ({
+            syncState: {
+              ...s.syncState,
+              phase: 'success',
+              lastSuccessfulSyncAt: nowIso(),
+              lastError: null,
+            },
+          }));
+        } catch (error) {
+          set((s) => ({
+            syncState: {
+              ...s.syncState,
+              phase: 'error',
+              lastError: error instanceof Error ? error.message : 'Sync failed',
+            },
+          }));
+          throw error;
+        }
       },
 
       deleteDocument: async (id) => {
@@ -826,6 +889,7 @@ export const useDocumentStore = create<DocumentState>()(
         folders: state.folders,
         deletedDocumentIds: state.deletedDocumentIds,
         deletedFolderIds: state.deletedFolderIds,
+        syncState: state.syncState,
       }),
     }
   )
