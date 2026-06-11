@@ -14,6 +14,7 @@ import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import * as FileSystem from 'expo-file-system';
 import {
+  buildPreferredStorageKey,
   checkDocumentsInR2,
   deleteDocumentFiles,
   repairStoredUri,
@@ -377,12 +378,15 @@ export const useDocumentStore = create<DocumentState>()(
         // already saved, so a cloud upload failure stays non-fatal and is
         // retried on the next sync cycle.
         if (doc.fileUri) {
+          const accountProfile = useAppStore.getState().accountProfile;
           uploadDocumentToR2({
             documentId: doc.id,
             localUri: doc.fileUri,
             mimeType: doc.mimeType,
             fileName: doc.title,
-            userEmail: useAppStore.getState().accountProfile?.email,
+            userEmail: accountProfile?.email,
+            category: doc.category,
+            ownerName: accountProfile?.fullName,
           }).then((storageUrl) => {
             if (storageUrl) {
               // Bump updatedAt so the incremental sync push picks this up —
@@ -451,6 +455,7 @@ export const useDocumentStore = create<DocumentState>()(
         {
           const localDocs = get().documents.filter((d) => d.fileUri);
           const keyedDocs = localDocs.filter((d) => d.storageUrl);
+          const accountProfile = useAppStore.getState().accountProfile;
           const existence = keyedDocs.length > 0
             ? await checkDocumentsInR2(
               keyedDocs.map((doc) => ({
@@ -460,7 +465,17 @@ export const useDocumentStore = create<DocumentState>()(
             )
             : new Map<string, boolean>();
           const missing = localDocs.filter((doc) => {
-            if (!doc.storageUrl) return true;
+            const desiredKey = buildPreferredStorageKey({
+              documentId: doc.id,
+              mimeType: doc.mimeType,
+              fileName: doc.title,
+              userEmail: accountProfile?.email,
+              category: doc.category,
+              ownerName: accountProfile?.fullName,
+            });
+            const currentKey = doc.storageUrl?.replace(/^r2:\/\/[^/]+\//, '');
+            if (!currentKey) return true;
+            if (currentKey !== desiredKey) return true;
             return existence.get(doc.id) === false;
           });
 
@@ -479,12 +494,15 @@ export const useDocumentStore = create<DocumentState>()(
               const info = await FileSystem.getInfoAsync(localUri);
               if (!info.exists) continue;
 
+              const accountProfile = useAppStore.getState().accountProfile;
               const storageUrl = await uploadDocumentToR2({
                 documentId: doc.id,
                 localUri,
                 mimeType: doc.mimeType,
                 fileName: doc.title,
-                userEmail: useAppStore.getState().accountProfile?.email,
+                userEmail: accountProfile?.email,
+                category: doc.category,
+                ownerName: accountProfile?.fullName,
               });
               if (storageUrl) {
                 // updatedAt must advance so the push filter below includes

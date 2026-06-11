@@ -17,6 +17,63 @@ import { apiRequest } from './api';
 
 const DOCS_DIR = `${FileSystem.documentDirectory}documents/`;
 
+function safeSegment(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return (
+    value
+      .trim()
+      .replace(/[^a-zA-Z0-9 ._-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 100) || fallback
+  );
+}
+
+function safeEmailSegment(email: string): string {
+  return (
+    email
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9@._+-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 100) || 'unknown-user'
+  );
+}
+
+function safeCategorySegment(category: string | undefined): string {
+  return (
+    category
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 60) || 'other'
+  );
+}
+
+export function buildPreferredStorageKey(params: {
+  documentId: string;
+  mimeType: string;
+  fileName?: string;
+  userEmail?: string;
+  category?: string;
+  ownerName?: string;
+}): string {
+  const ext = params.mimeType.split('/')[1]?.split('+')[0] ?? 'bin';
+  const safeName = safeSegment(params.fileName, 'document');
+  if (params.userEmail) {
+    return [
+      safeEmailSegment(params.userEmail),
+      safeCategorySegment(params.category),
+      safeSegment(params.ownerName, 'unknown-person'),
+      `${safeName}.${ext}`,
+    ].join('/');
+  }
+  return `documents/${params.documentId}/${safeName}.${ext}`;
+}
+
 export async function ensureDocumentDirectory(documentId: string): Promise<string> {
   const dir = `${DOCS_DIR}${documentId}/`;
   const info = await FileSystem.getInfoAsync(dir);
@@ -151,8 +208,10 @@ export async function uploadDocumentToR2(params: {
   documentId: string;
   localUri: string;
   mimeType: string;
-  fileName?: string; // document title — used as the folder + file name in R2
+  fileName?: string; // document title — used as the filename in R2
   userEmail?: string; // owner's email — used as the top-level folder in R2
+  category?: string;
+  ownerName?: string;
 }): Promise<string | null> {
   try {
     const { uploadUrl, storageUrl } = await apiRequest<{
@@ -166,6 +225,8 @@ export async function uploadDocumentToR2(params: {
         mimeType: params.mimeType,
         fileName: params.fileName,
         userEmail: params.userEmail,
+        category: params.category,
+        ownerName: params.ownerName,
       },
       timeoutMs: 15000,
     });
@@ -195,6 +256,8 @@ export async function checkDocumentsInR2(items: Array<{
   mimeType?: string;
   fileName?: string;
   userEmail?: string;
+  category?: string;
+  ownerName?: string;
 }>): Promise<Map<string, boolean>> {
   if (items.length === 0) return new Map();
 

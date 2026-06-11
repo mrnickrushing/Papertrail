@@ -142,12 +142,26 @@ function safeEmailSegment(email: string): string {
   );
 }
 
+function safeCategorySegment(category: string | undefined): string {
+  return (
+    category
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .substring(0, 60) || 'other'
+  );
+}
+
 /**
  * Derives the R2 object key for a document.
  *
- * With a user email: {email}/{sanitized-title}/{sanitized-title}.{ext}
+ * With a user email: {email}/{category}/{owner-name}/{title}.{ext}
  *   - top-level folder is the owner's email address
- *   - per-document folder carries the human-readable document title
+ *   - second-level folder groups by document category
+ *   - third-level folder groups by the account holder's name
+ *   - filename is the human-readable document title
  *
  * Without an email (older app builds): documents/{documentId}/{title}.{ext}
  *   - documentId keeps each key globally unique (UUID)
@@ -162,11 +176,15 @@ export function documentKey(
   mimeType: string,
   title?: string,
   userEmail?: string,
+  category?: string,
+  ownerName?: string,
 ): string {
   const ext = mimeType.split('/')[1]?.split('+')[0] ?? 'bin';
   const safeName = safeSegment(title, 'document');
   if (userEmail) {
-    return `${safeEmailSegment(userEmail)}/${safeName}/${safeName}.${ext}`;
+    const safeCategory = safeCategorySegment(category);
+    const safeOwnerName = safeSegment(ownerName, 'unknown-person');
+    return `${safeEmailSegment(userEmail)}/${safeCategory}/${safeOwnerName}/${safeName}.${ext}`;
   }
   return `documents/${documentId}/${safeName}.${ext}`;
 }
