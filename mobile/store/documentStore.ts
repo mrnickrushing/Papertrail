@@ -13,7 +13,14 @@ import { MMKV } from 'react-native-mmkv';
 import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import * as FileSystem from 'expo-file-system';
-import { deleteDocumentFiles, repairStoredUri, uploadDocumentToR2, downloadDocumentFromR2, getExtension } from '@/services/fileStorage';
+import {
+  checkDocumentsInR2,
+  deleteDocumentFiles,
+  repairStoredUri,
+  uploadDocumentToR2,
+  downloadDocumentFromR2,
+  getExtension,
+} from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 import { syncMetadata, type Tombstone } from '@/services/syncService';
 import { Colors } from '@/theme';
@@ -437,13 +444,26 @@ export const useDocumentStore = create<DocumentState>()(
       },
 
       syncWithBackend: async () => {
-        // Before syncing metadata, upload any existing documents that are
-        // missing a storageUrl so the backend can mirror the actual file, not
-        // just the metadata.
+        // Before syncing metadata, make sure any local files are actually
+        // present in R2. Older builds could leave behind storageUrl metadata
+        // even when the object upload never completed, so we verify existence
+        // and re-upload any missing objects here.
         {
-          const missing = get().documents.filter(
-            (d) => d.fileUri && !d.storageUrl
-          );
+          const localDocs = get().documents.filter((d) => d.fileUri);
+          const keyedDocs = localDocs.filter((d) => d.storageUrl);
+          const existence = keyedDocs.length > 0
+            ? await checkDocumentsInR2(
+              keyedDocs.map((doc) => ({
+                documentId: doc.id,
+                storageKey: doc.storageUrl?.replace(/^r2:\/\/[^/]+\//, ''),
+              })),
+            )
+            : new Map<string, boolean>();
+          const missing = localDocs.filter((doc) => {
+            if (!doc.storageUrl) return true;
+            return existence.get(doc.id) === false;
+          });
+
           // Upload sequentially to avoid hammering presigned URL requests
           for (const doc of missing) {
             try {

@@ -189,6 +189,34 @@ export async function uploadDocumentToR2(params: {
   }
 }
 
+export async function checkDocumentsInR2(items: Array<{
+  documentId: string;
+  storageKey?: string;
+  mimeType?: string;
+  fileName?: string;
+  userEmail?: string;
+}>): Promise<Map<string, boolean>> {
+  if (items.length === 0) return new Map();
+
+  try {
+    const response = await apiRequest<{
+      results: Array<{
+        documentId: string;
+        exists: boolean;
+      }>;
+    }>('/v1/storage/exists', {
+      method: 'POST',
+      body: { items },
+      timeoutMs: 15000,
+    });
+
+    return new Map(response.results.map((item) => [item.documentId, item.exists]));
+  } catch (err) {
+    console.warn('[r2] checkDocumentsInR2 failed:', err);
+    return new Map();
+  }
+}
+
 /**
  * Downloads a file from R2 to the local documents directory.
  * Returns the local URI, or null if download fails.

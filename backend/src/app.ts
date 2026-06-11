@@ -27,6 +27,7 @@ import {
   getUploadUrl,
   getDownloadUrl,
   documentKey,
+  objectExists,
 } from './r2.js';
 
 function parseBody<T>(schema: { parse: (value: unknown) => T }, body: unknown): T {
@@ -301,6 +302,54 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
 
     const downloadUrl = await getDownloadUrl(r2Client, r2Config.bucket, key);
     return { downloadUrl };
+  });
+
+  /**
+   * POST /v1/storage/exists
+   * Body: { items: Array<{ documentId: string; storageKey?: string; mimeType?: string; fileName?: string; userEmail?: string }> }
+   * Returns per-document existence so clients can repair stale storageUrl metadata.
+   */
+  app.post('/v1/storage/exists', async (request, reply) => {
+    if (!r2Client || !r2Config) {
+      return reply.code(503).send({ error: 'File storage not configured' });
+    }
+
+    const { items } = request.body as {
+      items?: Array<{
+        documentId?: string;
+        storageKey?: string;
+        mimeType?: string;
+        fileName?: string;
+        userEmail?: string;
+      }>;
+    };
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return reply.code(400).send({ error: 'items are required' });
+    }
+
+    const results = await Promise.all(items.map(async (item) => {
+      if (!item.documentId) {
+        return { documentId: '', exists: false, error: 'documentId is required' };
+      }
+
+      let key = item.storageKey;
+      if (!key) {
+        if (!item.mimeType) {
+          return {
+            documentId: item.documentId,
+            exists: false,
+            error: 'storageKey or mimeType is required',
+          };
+        }
+        key = documentKey(item.documentId, item.mimeType, item.fileName, item.userEmail);
+      }
+
+      const exists = await objectExists(r2Client, r2Config.bucket, key);
+      return { documentId: item.documentId, exists, storageKey: key };
+    }));
+
+    return { results };
   });
 
   /**

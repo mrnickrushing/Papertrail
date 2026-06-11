@@ -5,7 +5,13 @@
  * All operations are gated on R2 being configured via env vars.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export type R2Config = {
@@ -81,6 +87,31 @@ export async function deleteObject(
   key: string,
 ): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+/**
+ * Returns whether an object currently exists in R2.
+ */
+export async function objectExists(
+  client: S3Client,
+  bucket: string,
+  key: string,
+): Promise<boolean> {
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (error) {
+    if (
+      (typeof error === 'object' &&
+        error !== null &&
+        '$metadata' in error &&
+        typeof (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 'number' &&
+        (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404)
+    ) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 // Sanitize a path segment: keep alphanumerics, spaces, hyphens, underscores,
