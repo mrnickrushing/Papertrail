@@ -2,7 +2,11 @@
   "expo": {
     "name": "FileTrail",
     "slug": "filetrail",
+    "owner": "rushingtechnologies",
     "version": "1.3.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "web": {
@@ -42,7 +46,8 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.USE_BIOMETRIC"
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "plugins": [
@@ -69,12 +74,23 @@
       ]
     ],
     "scheme": "filetrail",
+    "updates": {
+      "url": "https://u.expo.dev/477b16b9-f591-4e43-8efe-6ef526a07ce0",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "b2a80367-e836-4bf3-9399-c9aa055294da"
+        "projectId": "477b16b9-f591-4e43-8efe-6ef526a07ce0"
       }
     }
   }

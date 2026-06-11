@@ -37,6 +37,7 @@
     "expo-sharing": "~13.0.1",
     "expo-splash-screen": "~0.29.0",
     "expo-status-bar": "~2.0.0",
+    "expo-updates": "~0.27.5",
     "nanoid": "^5.0.7",
     "pdf-lib": "^1.17.1",
     "react": "18.3.1",
