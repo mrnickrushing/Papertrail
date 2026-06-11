@@ -17,7 +17,6 @@ import { deleteDocumentFiles, repairStoredUri, uploadDocumentToR2, downloadDocum
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 import { syncMetadata, type Tombstone } from '@/services/syncService';
 import { Colors } from '@/theme';
-import { useProStore } from './proStore';
 import { useAppStore } from './appStore';
 
 const DOCUMENTS_STORE_KEY = 'filetrail-documents-v2';
@@ -367,9 +366,10 @@ export const useDocumentStore = create<DocumentState>()(
         if (isImage && doc.ocrStatus === 'pending') {
           enqueueOCR(doc.id, doc.fileUri);
         }
-        // Upload to R2 for Pro users (fire-and-forget; local file is already saved)
-        const isPro = useProStore.getState().isPro;
-        if (isPro && doc.fileUri) {
+        // Upload to R2 whenever backend storage is available. The local file is
+        // already saved, so a cloud upload failure stays non-fatal and is
+        // retried on the next sync cycle.
+        if (doc.fileUri) {
           uploadDocumentToR2({
             documentId: doc.id,
             localUri: doc.fileUri,
@@ -438,9 +438,9 @@ export const useDocumentStore = create<DocumentState>()(
 
       syncWithBackend: async () => {
         // Before syncing metadata, upload any existing documents that are
-        // missing a storageUrl (Pro users with pre-existing vault files).
-        const isPro = useProStore.getState().isPro;
-        if (isPro) {
+        // missing a storageUrl so the backend can mirror the actual file, not
+        // just the metadata.
+        {
           const missing = get().documents.filter(
             (d) => d.fileUri && !d.storageUrl
           );
@@ -489,7 +489,6 @@ export const useDocumentStore = create<DocumentState>()(
           deletedDocumentIds: get().deletedDocumentIds,
           deletedFolderIds: get().deletedFolderIds,
           mergeDocuments: (incoming) => {
-            const isPro = useProStore.getState().isPro;
             set((s) => {
               const localById = new Map(s.documents.map((doc) => [doc.id, doc]));
               for (const doc of incoming) {
@@ -510,34 +509,32 @@ export const useDocumentStore = create<DocumentState>()(
               }
               return { documents: Array.from(localById.values()) };
             });
-            // After merging, download any missing local files from R2 (Pro only).
+            // After merging, download any missing local files from R2.
             // This is the "new device" restore path.
-            if (isPro) {
-              for (const doc of incoming) {
-                if (!doc.storageUrl) continue;
-                // Use current state after merge
-                const merged = get().documents.find((d) => d.id === doc.id);
-                if (!merged || merged.fileUri) continue;
-                const ext = getExtension(doc.mimeType);
-                downloadDocumentFromR2({
-                  documentId: doc.id,
-                  mimeType: doc.mimeType,
-                  extension: ext,
-                  storageKey: doc.storageUrl
-                    ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
-                    : undefined,
-                }).then((localUri) => {
-                  if (localUri) {
-                    set((s) => ({
-                      documents: s.documents.map((d) =>
-                        d.id === doc.id ? { ...d, fileUri: localUri } : d
-                      ),
-                    }));
-                  }
-                }).catch(() => {
-                  // Non-fatal: file may not be in R2 yet
-                });
-              }
+            for (const doc of incoming) {
+              if (!doc.storageUrl) continue;
+              // Use current state after merge
+              const merged = get().documents.find((d) => d.id === doc.id);
+              if (!merged || merged.fileUri) continue;
+              const ext = getExtension(doc.mimeType);
+              downloadDocumentFromR2({
+                documentId: doc.id,
+                mimeType: doc.mimeType,
+                extension: ext,
+                storageKey: doc.storageUrl
+                  ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
+                  : undefined,
+              }).then((localUri) => {
+                if (localUri) {
+                  set((s) => ({
+                    documents: s.documents.map((d) =>
+                      d.id === doc.id ? { ...d, fileUri: localUri } : d
+                    ),
+                  }));
+                }
+              }).catch(() => {
+                // Non-fatal: file may not be in R2 yet
+              });
             }
           },
           mergeFolders: (incoming) => {

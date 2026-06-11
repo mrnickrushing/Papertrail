@@ -624,12 +624,12 @@ export default function SettingsScreen() {
           <Divider />
           <SettingsRow label="Build" value={BUILD} />
           <Divider />
-          <SettingsRow label="Storage" value={backendConfigured ? 'Device + cloud metadata' : 'On-device only'} />
+          <SettingsRow label="Storage" value={backendConfigured ? 'Device + cloud file backup' : 'On-device only'} />
         </View>
 
         <Text style={styles.footer}>
           {backendConfigured
-            ? 'FileTrail keeps document files on your device and syncs metadata with your configured backend.'
+            ? 'FileTrail keeps local copies on your device and mirrors document files to your configured cloud backend.'
             : 'FileTrail stores all your documents privately on your device.\nNothing is uploaded to any server.'}
         </Text>
       </ScrollView>

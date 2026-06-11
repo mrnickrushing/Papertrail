@@ -146,6 +146,7 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
   if (/\b(invoice|bill)\b/i.test(text)) tags.push('invoice');
   if (/\b(statement)\b/i.test(text)) tags.push('statement');
   if (/\b(renewal|renew)\b/i.test(text)) tags.push('renewal');
+  if (input.mimeType?.includes('pdf')) tags.push('pdf');
   if (tags.length === 0) tags.push('review');
 
   return {
