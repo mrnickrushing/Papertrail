@@ -29,9 +29,10 @@ interface HealthRingProps {
   documents: Document[];
   size?: number;
   strokeWidth?: number;
+  compact?: boolean;
 }
 
-export function HealthRing({ documents, size = 34, strokeWidth = 3 }: HealthRingProps) {
+export function HealthRing({ documents, size = 34, strokeWidth = 3, compact = false }: HealthRingProps) {
   const insets = useSafeAreaInsets();
   const [showExplain, setShowExplain] = useState(false);
 
@@ -58,34 +59,39 @@ export function HealthRing({ documents, size = 34, strokeWidth = 3 }: HealthRing
         accessibilityRole="button"
         accessibilityLabel={`Document health score: ${score} percent. Tap for details.`}
       >
-        <View style={[styles.ring, { width: size, height: size }]}>
-          <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-            <Circle
-              cx={center}
-              cy={center}
-              r={radius}
-              stroke={C.ink4}
-              strokeWidth={strokeWidth}
-              fill="none"
-            />
-            <Circle
-              cx={center}
-              cy={center}
-              r={radius}
-              stroke={color}
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeDasharray={`${circumference}, ${circumference}`}
-              strokeDashoffset={offset}
-              strokeLinecap="round"
-              rotation={-90}
-              originX={center}
-              originY={center}
-            />
-          </Svg>
-          <Text style={[styles.scoreText, { color, fontSize: Math.round(size * 0.32) }]}>
-            {score}
-          </Text>
+        <View style={[compact ? styles.compactWrap : null]}>
+          <View style={[styles.ring, { width: size, height: size }]}>
+            <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+              <Circle
+                cx={center}
+                cy={center}
+                r={radius}
+                stroke={C.ink4}
+                strokeWidth={strokeWidth}
+                fill="none"
+              />
+              <Circle
+                cx={center}
+                cy={center}
+                r={radius}
+                stroke={color}
+                strokeWidth={strokeWidth}
+                fill="none"
+                strokeDasharray={`${circumference}, ${circumference}`}
+                strokeDashoffset={offset}
+                strokeLinecap="round"
+                rotation={-90}
+                originX={center}
+                originY={center}
+              />
+            </Svg>
+            <Text style={[styles.scoreText, { color, fontSize: Math.round(size * 0.32) }]}>
+              {score}
+            </Text>
+          </View>
+          {compact && (
+            <Text style={[styles.compactLabel, { color }]}>Health</Text>
+          )}
         </View>
       </Pressable>
 
@@ -135,6 +141,23 @@ const styles = StyleSheet.create({
   ring: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  compactWrap: {
+    minHeight: 28,
+    paddingLeft: S[1],
+    paddingRight: S[2],
+    borderRadius: R.full,
+    backgroundColor: C.ink2,
+    borderWidth: 1,
+    borderColor: C.ink3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+  },
+  compactLabel: {
+    fontSize: T.xs,
+    fontWeight: '700',
+    marginRight: S[1],
   },
   scoreText: {
     fontWeight: '700',

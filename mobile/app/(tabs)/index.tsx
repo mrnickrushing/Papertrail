@@ -63,6 +63,8 @@ const CATEGORIES = [
   { key: 'pet',        label: 'Pets',       color: C.category.pet },
 ] as const;
 
+const COMMON_CATEGORY_KEYS = ['receipt', 'bill', 'contract', 'id', 'medical', 'tax'] as const;
+
 const SORT_LABELS: Record<ReturnType<typeof useAppStore.getState>['sortBy'], string> = {
   updatedAt: 'Modified',
   createdAt: 'Added',
@@ -256,6 +258,13 @@ export default function VaultScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [isAiOrganizing, setIsAiOrganizing] = useState(false);
   const [aiOrganizeProgress, setAiOrganizeProgress] = useState<{ done: number; total: number } | null>(null);
+  const [showAllCategoryFilters, setShowAllCategoryFilters] = useState(false);
+
+  React.useEffect(() => {
+    if (filters.category && !COMMON_CATEGORY_KEYS.includes(filters.category as typeof COMMON_CATEGORY_KEYS[number])) {
+      setShowAllCategoryFilters(true);
+    }
+  }, [filters.category]);
 
   const enterSelectionMode = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -535,7 +544,7 @@ export default function VaultScreen() {
         title={selectionMode ? `${selectedIds.size} selected` : 'FileTrail'}
         subtitle={selectionMode ? undefined : `${visibleDocuments.length} document${visibleDocuments.length !== 1 ? 's' : ''}`}
         subtitleAccessory={
-          selectionMode || documents.length === 0 ? undefined : <HealthRing documents={documents} size={22} strokeWidth={2.5} />
+          selectionMode || documents.length === 0 ? undefined : <HealthRing documents={documents} size={18} strokeWidth={2.25} compact />
         }
         right={
           selectionMode ? (
@@ -545,7 +554,17 @@ export default function VaultScreen() {
           ) : (
             <View style={styles.headerControls}>
               <Pressable
-                style={styles.headerControlBtn}
+                style={[styles.headerControlBtn, styles.headerControlFoldersBtn]}
+                hitSlop={8}
+                onPress={() => router.push('/(tabs)/folders')}
+                accessibilityLabel="Open folders"
+                accessibilityRole="button"
+              >
+                <Feather name="folder" size={15} color={C.amber} />
+                <Text style={[styles.headerControlText, styles.headerFolderText]}>Folders</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.headerControlBtn, styles.headerControlDivider]}
                 hitSlop={8}
                 onPress={() => {
                   Haptics.selectionAsync();
@@ -628,7 +647,9 @@ export default function VaultScreen() {
       <FilterBar
         filters={filters}
         allTags={allTags}
+        showAllCategories={showAllCategoryFilters}
         onCategoryChange={(cat) => setFilters({ ...filters, category: cat })}
+        onToggleCategoryVisibility={() => setShowAllCategoryFilters((value) => !value)}
         onToggleFavorite={toggleFavoriteFilter}
         onToggleTag={toggleTagFilter}
       />
@@ -784,15 +805,28 @@ export default function VaultScreen() {
 interface FilterBarProps {
   filters: SearchFilters;
   allTags: string[];
+  showAllCategories: boolean;
   onCategoryChange: (cat: (typeof CATEGORIES)[number]['key']) => void;
+  onToggleCategoryVisibility: () => void;
   onToggleFavorite: () => void;
   onToggleTag: (tag: string) => void;
 }
 
-function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onToggleTag }: FilterBarProps) {
+function FilterBar({
+  filters,
+  allTags,
+  showAllCategories,
+  onCategoryChange,
+  onToggleCategoryVisibility,
+  onToggleFavorite,
+  onToggleTag,
+}: FilterBarProps) {
   const activeCategory = filters.category;
   const activeTags = filters.tags ?? [];
   const favoriteActive = !!filters.isFavorite;
+  const visibleCategories = showAllCategories
+    ? CATEGORIES
+    : CATEGORIES.filter((category) => category.key === undefined || COMMON_CATEGORY_KEYS.includes(category.key as typeof COMMON_CATEGORY_KEYS[number]));
 
   return (
     <ScrollView
@@ -800,7 +834,7 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.chips}
     >
-      {CATEGORIES.map((c) => {
+      {visibleCategories.map((c) => {
         const isActive = activeCategory === c.key;
         const chipColor = c.color ?? C.amber;
         return (
@@ -833,6 +867,17 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
           </Pressable>
         );
       })}
+
+      <Pressable
+        style={styles.chip}
+        onPress={onToggleCategoryVisibility}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={showAllCategories ? 'Show fewer category filters' : 'Show all category filters'}
+      >
+        <Feather name={showAllCategories ? 'chevron-left' : 'more-horizontal'} size={12} color={C.ash} />
+        <Text style={styles.chipText}>{showAllCategories ? 'Less' : 'More'}</Text>
+      </Pressable>
 
       <View style={styles.chipDivider} />
 
@@ -908,6 +953,9 @@ const styles = StyleSheet.create({
     minHeight: 32,
     justifyContent: 'center',
   },
+  headerControlFoldersBtn: {
+    paddingHorizontal: S[3],
+  },
   headerControlDivider: {
     borderLeftWidth: 1,
     borderLeftColor: C.ink3,
@@ -916,6 +964,9 @@ const styles = StyleSheet.create({
     fontSize: T.xs,
     color: C.ash,
     fontWeight: '600',
+  },
+  headerFolderText: {
+    color: C.amber,
   },
   chips: {
     flexDirection:  'row',

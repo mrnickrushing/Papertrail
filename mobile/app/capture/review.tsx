@@ -598,6 +598,11 @@ export default function DocumentReviewScreen() {
             <Text style={styles.saveBtnText}>Save Document</Text>
           )}
         </Pressable>
+        {aiStatus === 'processing' && (
+          <Text style={styles.saveHint}>
+            AI is still analysing this document. You can save now, but waiting a moment may improve the title, category, and folder suggestion.
+          </Text>
+        )}
       </ScrollView>
       {showPaywall && (
         <PaywallModal
@@ -788,5 +793,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.ink1,
     letterSpacing: 0.3,
+  },
+  saveHint: {
+    fontSize: T.xs,
+    color: C.ash,
+    textAlign: 'center',
+    marginTop: S[2],
+    marginBottom: S[2],
+    lineHeight: 18,
+    paddingHorizontal: S[2],
   },
 });

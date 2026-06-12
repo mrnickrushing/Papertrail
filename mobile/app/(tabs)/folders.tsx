@@ -300,7 +300,7 @@ export default function FoldersScreen() {
         )}
       </ScrollView>
 
-      <FAB onPress={openCreate} />
+      <FAB onPress={() => router.push('/capture')} />
 
       {showPaywall && (
         <PaywallModal

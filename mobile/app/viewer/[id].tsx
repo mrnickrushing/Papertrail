@@ -517,6 +517,55 @@ export default function DocumentViewerScreen() {
           )}
         </View>
 
+        {/* Smart Organize — promoted directly under the preview so the highest-
+            value action is visible before title/category editing and metadata. */}
+        <View style={styles.organizeCard}>
+          <View style={styles.organizeHeader}>
+            <View style={styles.organizeTitleWrap}>
+              <Text style={styles.organizeTitle}>Smart Organize</Text>
+              <Text style={styles.organizeBody}>
+                Use AI to rename, categorize, tag, and suggest a folder for this document.
+              </Text>
+              {document.aiSource && (
+                <Text style={styles.organizeAiSource}>
+                  {document.aiSource === 'claude' ? '✦ Organised by Claude' : '· Organised by heuristics'}
+                </Text>
+              )}
+              {document.aiOrganizedAt && (
+                <Text style={styles.organizeAiSource}>
+                  Last organised {formatRelativeTime(document.aiOrganizedAt)}
+                </Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.organizeActions}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.organizeBtnSecondary,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={() => setShowFolderPicker(true)}
+            >
+              <Text style={styles.organizeBtnSecondaryText}>Move Folder</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.organizeBtnPrimary,
+                (pressed || isAiOrganizing) && { opacity: 0.85 },
+              ]}
+              onPress={handleAiOrganize}
+              disabled={isAiOrganizing}
+            >
+              {isAiOrganizing ? (
+                <ActivityIndicator size="small" color={C.ink1} />
+              ) : (
+                <Text style={styles.organizeBtnPrimaryText}>AI Organize</Text>
+              )}
+            </Pressable>
+          </View>
+          {aiSummary && <Text style={styles.organizeSummary}>{aiSummary}</Text>}
+        </View>
+
         {/* ── Title ── */}
         <View style={styles.metaSection}>
           <Pressable
@@ -557,55 +606,6 @@ export default function DocumentViewerScreen() {
             </Text>
             <Text style={styles.categoryChevron}>›</Text>
           </Pressable>
-
-          {/* Smart Organize — the highest-value action on this screen, placed
-              above the metadata strip so it isn't buried under chips. */}
-          <View style={styles.organizeCard}>
-            <View style={styles.organizeHeader}>
-              <View style={styles.organizeTitleWrap}>
-                <Text style={styles.organizeTitle}>Smart Organize</Text>
-                <Text style={styles.organizeBody}>
-                  Use AI to rename, categorize, tag, and suggest a folder for this document.
-                </Text>
-                {document.aiSource && (
-                  <Text style={styles.organizeAiSource}>
-                    {document.aiSource === 'claude' ? '✦ Organised by Claude' : '· Organised by heuristics'}
-                  </Text>
-                )}
-                {document.aiOrganizedAt && (
-                  <Text style={styles.organizeAiSource}>
-                    Last organised {formatRelativeTime(document.aiOrganizedAt)}
-                  </Text>
-                )}
-              </View>
-            </View>
-            <View style={styles.organizeActions}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.organizeBtnSecondary,
-                  pressed && { opacity: 0.8 },
-                ]}
-                onPress={() => setShowFolderPicker(true)}
-              >
-                <Text style={styles.organizeBtnSecondaryText}>Move Folder</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.organizeBtnPrimary,
-                  (pressed || isAiOrganizing) && { opacity: 0.85 },
-                ]}
-                onPress={handleAiOrganize}
-                disabled={isAiOrganizing}
-              >
-                {isAiOrganizing ? (
-                  <ActivityIndicator size="small" color={C.ink1} />
-                ) : (
-                  <Text style={styles.organizeBtnPrimaryText}>AI Organize</Text>
-                )}
-              </Pressable>
-            </View>
-            {aiSummary && <Text style={styles.organizeSummary}>{aiSummary}</Text>}
-          </View>
 
           {/* Meta chips */}
           <View style={styles.metaRow}>
@@ -1080,6 +1080,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: `${C.amber}33`,
     padding: S[4],
+    marginHorizontal: S[4],
+    marginBottom: S[3],
     gap: S[3],
   },
   organizeHeader: {

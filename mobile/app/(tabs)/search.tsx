@@ -15,6 +15,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useDocumentStore } from '@/store';
+import { FAB } from '@/components/FAB';
 import {
   addRecentSearch,
   clearSearchHistory,
@@ -316,6 +317,8 @@ export default function SearchScreen() {
           }}
         />
       )}
+
+      <FAB onPress={() => router.push('/capture')} />
     </View>
   );
 }
