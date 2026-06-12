@@ -14,6 +14,12 @@ workflows:
         OTA_MESSAGE: "FileTrail OTA update"
         EXPO_PUBLIC_API_URL: https://papertrail-production-de23.up.railway.app
     scripts:
+      - name: Reset to clean main
+        script: |
+          git fetch origin main
+          git reset --hard origin/main
+          git clean -fdx
+          test -z "$(git status --porcelain)"
       - name: Install mobile dependencies
         script: |
           npm run install:mobile
