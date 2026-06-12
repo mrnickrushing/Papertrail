@@ -239,7 +239,18 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
   const title = cleanTitle || filename;
 
   const text = `${title}\n${input.ocrText ?? ''}`;
-  const category = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'other';
+  // Primary: word-boundary match against title + OCR text
+  let category = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0];
+  // Fallback: substring match on the raw filename without \b constraints — handles
+  // concatenated filenames like "2017turbotaxreturn" where word boundaries don't exist.
+  if (!category && input.filename) {
+    const rawFile = input.filename.replace(/\.[a-z0-9]+$/i, '');
+    category = CATEGORY_KEYWORDS.find(([, pattern]) => {
+      const loose = new RegExp(pattern.source.replace(/\\b/g, ''), pattern.flags);
+      return loose.test(rawFile);
+    })?.[0];
+  }
+  category = category ?? 'other';
 
   const firstOcrLine = input.ocrText
     ?.split('\n')
@@ -290,7 +301,7 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
 async function extractPdfText(base64: string): Promise<string> {
   try {
     const buffer = Buffer.from(base64, 'base64');
-    const result = await pdfParse(buffer, { max: 10 });
+    const result = await pdfParse(buffer, { max: 15 });
     return result.text?.trim() ?? '';
   } catch {
     return '';
@@ -298,8 +309,8 @@ async function extractPdfText(base64: string): Promise<string> {
 }
 
 function isPdfPageLimitError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return /maximum of 100 PDF pages/i.test(message);
+  const msg = err instanceof Error ? err.message : String(err);
+  return /\b100 pages?\b|at most \d+ pages?|too many pages?|page.{0,20}limit|pdf.{0,30}pages?|pages? (?:limit|exceeded|maximum|too)/i.test(msg);
 }
 
 async function requestClaudeTextOnly(client: Anthropic, input: {
