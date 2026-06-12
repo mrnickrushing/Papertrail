@@ -4,8 +4,6 @@ import { useRouter } from 'expo-router';
 import { useDocumentStore, useAppStore, useProStore } from '@/store';
 import { TourBubble } from '@/components/TourBubble';
 import { useTourTip } from '@/hooks/useTourTip';
-import { TourBubble } from '@/components/TourBubble';
-import { useTourTip } from '@/hooks/useTourTip';
 import { PaywallModal } from '@/components/PaywallModal';
 import { FAB } from '@/components/FAB';
 import {
@@ -137,7 +135,7 @@ export default function SettingsScreen() {
 }
 
 function SettingsTourTip() {
-  const { visible, dismiss } = useTourTip(‘settings-backup’);
+  const { visible, dismiss } = useTourTip('settings-backup');
   const insets = useSafeAreaInsets();
   return (
     <TourBubble
