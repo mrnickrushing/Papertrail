@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useCamera } from '@/hooks/useCamera';
+import { useDocumentScanner } from '@/hooks/useDocumentScanner';
 import { useDocumentPicker } from '@/hooks/useDocumentPicker';
 import { PermissionPrompt } from './PermissionPrompt';
 import { C, T, R, S } from '@/theme/tokens';
@@ -35,15 +35,15 @@ interface CaptureModalProps {
 
 export function CaptureModal({ visible, onClose }: CaptureModalProps) {
   const insets = useSafeAreaInsets();
-  const { capture, isLoading: cameraLoading } = useCamera();
+  const { scan, isLoading: scannerLoading } = useDocumentScanner();
   const { pickFile, pickPhoto, isLoading: pickerLoading } = useDocumentPicker();
-  const isLoading = cameraLoading || pickerLoading;
+  const isLoading = scannerLoading || pickerLoading;
   const [permissionPrompt, setPermissionPrompt] = useState<'camera' | 'photos' | null>(null);
 
   if (!visible) return null;
 
   const handleCamera = useCallback(async () => {
-    const result = await capture();
+    const result = await scan();
     if (result.status === 'captured') {
       router.push({
         pathname: '/capture/review',
@@ -52,9 +52,9 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
     } else if (result.status === 'denied') {
       setPermissionPrompt('camera');
     } else if (result.status === 'error') {
-      Alert.alert('Camera Failed', result.message);
+      Alert.alert('Scan Failed', result.message);
     }
-  }, [capture]);
+  }, [scan]);
 
   const handlePhoto = useCallback(async () => {
     const result = await pickPhoto();
@@ -112,7 +112,7 @@ export function CaptureModal({ visible, onClose }: CaptureModalProps) {
             <CaptureOption
               emoji="📷"
               label="Scan Document"
-              description="Use your camera"
+              description="Auto-crop and clean like a scanner"
               onPress={handleCamera}
             />
             <CaptureOption
