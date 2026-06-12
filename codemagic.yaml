@@ -10,6 +10,7 @@ workflows:
       vars:
         CI: "1"
         EXPO_TOKEN: "0jmTCQH3xPGBbv_LC-D9jYK8Gppf5ya1e6323T-E"
+        EXPO_PUBLIC_REVENUECAT_IOS_KEY: "appl_TgiNXVHaxiiEfFbKfcYfbSnFCwh"
         OTA_CHANNEL: "production"
         OTA_MESSAGE: "FileTrail OTA update"
         EXPO_PUBLIC_API_URL: https://papertrail-production-de23.up.railway.app
@@ -145,6 +146,7 @@ workflows:
         BUNDLE_ID: com.papertraill.app
         XCODE_SCHEME: FileTrail
         EXPO_PUBLIC_API_URL: https://papertrail-production-de23.up.railway.app
+        EXPO_PUBLIC_REVENUECAT_IOS_KEY: "appl_TgiNXVHaxiiEfFbKfcYfbSnFCwh"
       groups:
         - ios_credentials
         - public_env
