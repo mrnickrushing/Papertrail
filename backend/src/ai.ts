@@ -31,7 +31,7 @@ const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
   ['property', /\b(property deed|deed of trust|mortgage (?:agreement|application|approval)|lease agreement|rental agreement|landlord|tenant|closing disclosure|title insurance|homeowners association|\bhoa\b|escrow (?:account|statement)|home inspection|real estate (?:purchase|closing)|security deposit)\b/i],
   ['receipt', /\b(receipt|subtotal|total|paid|visa|mastercard|store)\b/i],
   ['contract', /\b(contract|agreement|signature|party|terms)\b/i],
-  ['id', /\b(driver|license|passport|identification|dob)\b/i],
+  ['id', /\b(driver|license|passport|identification|dob|birth certificate|certificate of live birth|social security)\b/i],
   ['warranty', /\b(warranty|serial|coverage|expires)\b/i],
   ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx|emergency|urgent care|panel|specimen|lab(?:oratory)?|glucose|cholesterol|triglycerides?|hdl|ldl|hemoglobin|a1c|metabolic|lipid|blood (?:work|test|count)|reference range|physician|provider|doctor|prescri\w*)\b|\bE\.?R\.?\b/i],
   ['work', /\b(pay ?stub|payslip|earnings statement|employee|employer|employment (?:agreement|contract|offer|verification)|offer letter|performance review|onboarding|timesheet|direct deposit|human resources|\bhr\b|job offer|termination letter|resignation letter|w-?4|i-9)\b/i],
@@ -57,6 +57,15 @@ const CATEGORY_FOLDER: Record<DocumentCategory, string> = {
   pet: 'Pets',
   other: 'Other Documents',
 };
+
+const PERSON_SUBFOLDER_CATEGORIES = new Set<DocumentCategory>([
+  'id',
+  'medical',
+  'education',
+  'travel',
+  'insurance',
+  'legal',
+]);
 
 const SUPPORTED_IMAGE_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
@@ -105,6 +114,94 @@ function normalizeFilename(filename: string): string {
   return titleCased.slice(0, 60);
 }
 
+function titleCaseWord(word: string): string {
+  if (!word) return word;
+  if (/^(II|III|IV|VI|VII|VIII|IX|X)$/.test(word)) return word;
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function normalizePersonName(raw: string): string {
+  const cleaned = raw
+    .replace(/\s+/g, ' ')
+    .replace(/^[^A-Za-z]+|[^A-Za-z'. -]+$/g, '')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned
+    .split(' ')
+    .filter(Boolean)
+    .map((part) =>
+      part
+        .split(/([-'’])/)
+        .map((segment) => (/^[-'’]$/.test(segment) ? segment : titleCaseWord(segment)))
+        .join(''),
+    )
+    .join(' ')
+    .slice(0, 80);
+}
+
+function isLikelyPersonName(raw: string): boolean {
+  const value = normalizePersonName(raw);
+  if (!value) return false;
+  if (/\d/.test(value)) return false;
+  const parts = value.split(' ').filter(Boolean);
+  if (parts.length < 2 || parts.length > 4) return false;
+  const lower = value.toLowerCase();
+  if (/\b(birth certificate|certificate|department|registrar|medical|hospital|clinic|license|passport|identification|social security|statement|insurance|county|state|city|country|sex|mother|father|child|name|issued|signature|address|street)\b/.test(lower)) {
+    return false;
+  }
+  return parts.every((part) => /^[A-Za-z][A-Za-z'’.-]*$/.test(part));
+}
+
+function extractPersonSubfolderName(input: {
+  title?: string;
+  ocrText?: string;
+  category: DocumentCategory;
+}): string | undefined {
+  if (!PERSON_SUBFOLDER_CATEGORIES.has(input.category)) return undefined;
+
+  const text = `${input.title ?? ''}\n${input.ocrText ?? ''}`;
+  const lines = text
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const inlineLabelPatterns = [
+    /(?:patient name|name of child|child(?:'s)? name|full name|student name|member name|insured name|employee name|traveler name|passenger name|name)[ \t]*[:\-]?[ \t]*([A-Z][A-Za-z'’.-]+(?:[ \t]+[A-Z][A-Za-z'’.-]+){1,3})/i,
+  ];
+  for (const pattern of inlineLabelPatterns) {
+    const match = text.match(pattern);
+    if (match?.[1] && isLikelyPersonName(match[1])) {
+      return normalizePersonName(match[1]);
+    }
+  }
+
+  const labelOnlyPatterns = [
+    /^(?:patient name|name of child|child(?:'s)? name|full name|student name|member name|insured name|employee name|traveler name|passenger name|name)$/i,
+    /^(?:patient|student|member|insured|employee|traveler|passenger|child)$/i,
+  ];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!labelOnlyPatterns.some((pattern) => pattern.test(lines[index]))) continue;
+    const next = lines[index + 1];
+    if (next && isLikelyPersonName(next)) {
+      return normalizePersonName(next);
+    }
+  }
+
+  const titleNamePatterns = [
+    /([A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){1,3})\s+(?:birth certificate|passport|driver(?:'s)? license|social security card)/i,
+    /(?:birth certificate|passport|driver(?:'s)? license|social security card)\s+for\s+([A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){1,3})/i,
+  ];
+  for (const pattern of titleNamePatterns) {
+    const match = (input.title ?? '').match(pattern);
+    if (match?.[1] && isLikelyPersonName(match[1])) {
+      return normalizePersonName(match[1]);
+    }
+  }
+
+  const plausibleLine = lines.find((line) => isLikelyPersonName(line));
+  return plausibleLine ? normalizePersonName(plausibleLine) : undefined;
+}
+
 function extractJsonObject(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
@@ -149,9 +246,16 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
   if (input.mimeType?.includes('pdf')) tags.push('pdf');
   if (tags.length === 0) tags.push('review');
 
+  const suggestedSubfolderName = extractPersonSubfolderName({
+    title: title || input.filename,
+    ocrText: input.ocrText,
+    category,
+  });
+
   return {
     suggestedTitle: baseTitle.slice(0, 120),
     suggestedFolderName: CATEGORY_FOLDER[category],
+    ...(suggestedSubfolderName ? { suggestedSubfolderName } : {}),
     category,
     tags,
     source: 'heuristic',
@@ -191,7 +295,7 @@ function buildSchemaPrompt(existingFolders?: string[]): string {
 - "vendor": merchant, organization, or issuing party name, or omit if not applicable
 - "amounts": array of numeric monetary values (no currency symbols, e.g. [142.50, 9.99]), or omit if none
 - "folderName": the folder to file this in — use the standard name for the category (e.g. "Receipts", "Contracts", "Tax Documents", "Medical Records") but use a more specific name when clearly appropriate (e.g. "Court Documents" for legal filings, "Insurance" for insurance docs); keep it short.${folderGuidance}
-- "subfolderName": for medical documents, the patient's full name as it appears on the document, for use as a subfolder name; omit if not a medical document or if no patient name is found`;
+- "subfolderName": for documents that are clearly about a specific person (especially medical records, IDs, passports, birth certificates, school records, or similar personal records), return that person's full name exactly as it appears on the document for use as a subfolder name; omit if no clear person name is found. Prefer the subject of the document, not the issuing agency, provider, parent, witness, or clerk. Examples: for a birth certificate use the child's name, for a driver's license use the cardholder's name, for a lab result use the patient's name.`;
 }
 
 export async function suggestDocument(input: {
@@ -329,9 +433,14 @@ export async function suggestDocument(input: {
     const suggestedFolderName: string = typeof parsed.folderName === 'string' && parsed.folderName.trim()
       ? parsed.folderName.trim().slice(0, 80)
       : CATEGORY_FOLDER[category];
+    const heuristicSubfolderName = extractPersonSubfolderName({
+      title: suggestedTitle,
+      ocrText: input.ocrText?.trim(),
+      category,
+    });
     const suggestedSubfolderName: string | undefined = typeof parsed.subfolderName === 'string' && parsed.subfolderName.trim()
       ? parsed.subfolderName.trim().slice(0, 80)
-      : undefined;
+      : heuristicSubfolderName;
 
     const usageResult = usage
       ? {

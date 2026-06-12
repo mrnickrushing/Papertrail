@@ -156,6 +156,24 @@ test('AI suggestion endpoint uses filename when OCR text is missing', async () =
   assert.ok(res.json().tags.includes('warranty'));
 });
 
+test('AI suggestion endpoint extracts a person subfolder for birth certificates', async () => {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v1/ai/suggest-document',
+    headers: { Authorization: 'Bearer test-key' },
+    payload: {
+      title: 'Birth Certificate',
+      ocrText: 'CERTIFICATE OF LIVE BIRTH\nNAME OF CHILD\nJACOB ELI RUSHING\nDATE OF BIRTH\n2024-02-10',
+      mimeType: 'application/pdf',
+    },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().category, 'id');
+  assert.equal(res.json().suggestedFolderName, 'IDs');
+  assert.equal(res.json().suggestedSubfolderName, 'Jacob Eli Rushing');
+});
+
 test('share links enforce passwords and list created links', async () => {
   const auth = { Authorization: 'Bearer test-key' };
   const expiresAt = new Date(Date.now() + 3600_000).toISOString();
