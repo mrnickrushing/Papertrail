@@ -719,7 +719,7 @@ export default function VaultScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top + S[2] }]}>
       <ScreenHeader
         title={selectionMode ? `${selectedIds.size} selected` : 'FileTrail'}
         subtitle={selectionMode ? undefined : `${visibleDocuments.length} document${visibleDocuments.length !== 1 ? 's' : ''}`}
