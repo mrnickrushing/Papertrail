@@ -25,6 +25,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useDocumentStore, useProStore } from '@/store';
+import { TourBubble } from '@/components/TourBubble';
+import { useTourTip } from '@/hooks/useTourTip';
 import { PaywallModal } from '@/components/PaywallModal';
 import { DocumentCard } from '@/components/DocumentCard';
 import { EmptyState } from '@/components/EmptyState';
@@ -300,7 +302,7 @@ export default function FoldersScreen() {
         )}
       </ScrollView>
 
-      <FAB onPress={openCreate} />
+      <FAB onPress={() => router.push('/capture')} />
 
       {showPaywall && (
         <PaywallModal
@@ -389,7 +391,24 @@ export default function FoldersScreen() {
         </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+
+      <FoldersTourTip />
     </View>
+  );
+}
+
+function FoldersTourTip() {
+  const { visible, dismiss } = useTourTip('folders-new');
+  const insets = useSafeAreaInsets();
+  return (
+    <TourBubble
+      title="Organise with folders"
+      body="Tap + New to create a folder. Colour-code them, nest subfolders, and move documents in bulk."
+      visible={visible}
+      onDismiss={dismiss}
+      anchor={{ top: insets.top + 52, right: 12 }}
+      arrow="top-right"
+    />
   );
 }
 

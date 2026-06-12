@@ -19,6 +19,37 @@ const VALID_CATEGORIES: DocumentCategory[] = [
   'insurance', 'legal', 'vehicle', 'property', 'education', 'travel', 'pet', 'other',
 ];
 
+// ── Compound-word expansions for common document filenames ────────────────────
+// Applied before camelCase / number-letter splitting so the regex patterns
+// that follow can see the individual words with proper boundaries.
+const COMPOUND_SPLITS: [RegExp, string][] = [
+  [/turbotax/gi,         'TurboTax'],
+  [/taxreturn/gi,        'Tax Return'],
+  [/taxform/gi,          'Tax Form'],
+  [/taxdocument/gi,      'Tax Document'],
+  [/paystub/gi,          'Pay Stub'],
+  [/payslip/gi,          'Pay Slip'],
+  [/offerletter/gi,      'Offer Letter'],
+  [/labresult/gi,        'Lab Result'],
+  [/labwork/gi,          'Lab Work'],
+  [/medicalrecord/gi,    'Medical Record'],
+  [/healthrecord/gi,     'Health Record'],
+  [/insurancepolicy/gi,  'Insurance Policy'],
+  [/insuranceclaim/gi,   'Insurance Claim'],
+  [/bankstatement/gi,    'Bank Statement'],
+  [/creditcard/gi,       'Credit Card'],
+  [/propertydeed/gi,     'Property Deed'],
+  [/deedoftrust/gi,      'Deed Of Trust'],
+  [/vehiclereg/gi,       'Vehicle Reg'],
+  [/driverslicense/gi,   'Drivers License'],
+  [/socialsecurity/gi,   'Social Security'],
+  [/birthcert/gi,        'Birth Certificate'],
+  [/deathcert/gi,        'Death Certificate'],
+  [/powerofatt/gi,       'Power Of Attorney'],
+  [/studentloan/gi,      'Student Loan'],
+  [/directdeposit/gi,    'Direct Deposit'],
+];
+
 const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
   ['pet', /\b(veterinar\w*|vaccination record|rabies (?:certificate|vaccine|tag)|microchip (?:number|registration)|pet adoption|animal hospital|pet insurance|spay\/?neuter|pedigree (?:certificate|papers)|pet license)\b/i],
   ['education', /\b(diploma|transcript|degree conferred|enrollment (?:verification|confirmation)|student loan|\bfafsa\b|tuition (?:statement|invoice|bill)|report card|certificate of completion|continuing education credits|alumni association)\b/i],
@@ -97,7 +128,21 @@ function isUuidLike(s: string): boolean {
 function normalizeFilename(filename: string): string {
   const noExt = filename.replace(/\.[a-z0-9]+$/i, '');
   if (isUuidLike(noExt)) return '';
-  const spaced = noExt.replace(/[_-]+/g, ' ').trim();
+
+  // Expand known compound document words first so word-boundary splitting works
+  let expanded = noExt;
+  for (const [pattern, replacement] of COMPOUND_SPLITS) {
+    expanded = expanded.replace(pattern, replacement);
+  }
+
+  const spaced = expanded
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')        // camelCase → camel Case
+    .replace(/([0-9]+)([a-zA-Z])/g, '$1 $2')     // 2017turbo → 2017 turbo
+    .replace(/([a-zA-Z])([0-9]+)/g, '$1 $2')     // return1040 → return 1040
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
   const titleCased = spaced
     .split(' ')
     .map(w => w === w.toUpperCase() && w.length > 1 ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -116,14 +161,41 @@ function extractJsonObject(raw: string): string {
   return trimmed;
 }
 
+// Compound-filename patterns applied WITHOUT \b so they match inside concatenated
+// words like "2017turbotaxreturn" or "labresultsjune2024". These run as a
+// second-pass fallback when the main \b-based regex finds nothing.
+const FILENAME_COMPOUND_PATTERNS: Array<[DocumentCategory, RegExp]> = [
+  ['tax',        /turbotax|taxreturn|federaltax|statetax|form1040|irs1040|taxdoc|1040ez|1040a|scheduleA|scheduleB|scheduleC|scheduleD/i],
+  ['work',       /paystub|payslip|offerletter|w4form|i9form|directdeposit|employmentverif/i],
+  ['medical',    /labresult|labwork|testresult|medicalrecord|healthrecord|patientrecord/i],
+  ['insurance',  /insurancepolicy|policycard|insuranceclaim|premiumstatement/i],
+  ['retirement', /401k|403b|rothira|retirementplan|pensionstatement/i],
+  ['legal',      /divorcedecree|divorcepapers|courtorder|powerofatt/i],
+  ['vehicle',    /vehiclereg|vehicletitle|dmvform|cartitle/i],
+  ['property',   /propertydeed|deedoftrust|mortgagestatement|hoastatement/i],
+  ['education',  /studentloan|tuitionstatement/i],
+];
+
 function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: string; mimeType?: string }): SuggestResult {
   const filename = input.filename ? normalizeFilename(input.filename) : '';
   const rawTitle = input.title?.trim() ?? '';
   const cleanTitle = (isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) || isFallbackTitle(rawTitle)) ? '' : rawTitle;
-  const title = cleanTitle || filename;
+  // Normalize the cleaned title the same way we normalize filenames so that
+  // "2017turbotaxreturn" becomes "2017 Turbo Tax Return" for regex matching.
+  const normalizedCleanTitle = cleanTitle ? normalizeFilename(cleanTitle) : '';
+  const title = normalizedCleanTitle || filename;
 
   const text = `${title}\n${input.ocrText ?? ''}`;
-  const category = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'other';
+  let category: DocumentCategory = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'other';
+
+  // Second pass: strip all separators from the raw filename and test compound
+  // patterns without word boundaries — catches "2017turbotaxreturn" etc.
+  if (category === 'other') {
+    const rawFileLower = (input.filename ?? input.title ?? '').toLowerCase()
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[\s._-]+/g, '');
+    category = FILENAME_COMPOUND_PATTERNS.find(([, p]) => p.test(rawFileLower))?.[0] ?? 'other';
+  }
 
   const firstOcrLine = input.ocrText
     ?.split('\n')
@@ -146,13 +218,44 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
   if (/\b(invoice|bill)\b/i.test(text)) tags.push('invoice');
   if (/\b(statement)\b/i.test(text)) tags.push('statement');
   if (/\b(renewal|renew)\b/i.test(text)) tags.push('renewal');
+
+  // Category-specific tag enrichment from filename/title signals
+  const searchText = `${input.filename ?? ''} ${input.title ?? ''} ${input.ocrText ?? ''}`;
+  if (category === 'tax') {
+    const yearMatch = searchText.match(/\b(20\d{2}|19\d{2})\b/);
+    if (yearMatch) tags.push(yearMatch[0]);
+    if (/turbotax/i.test(searchText)) tags.push('turbotax');
+    if (/\b1040\b/.test(searchText)) tags.push('1040');
+    if (/\b1099\b/.test(searchText)) tags.push('1099');
+    if (/\bw-?2\b/i.test(searchText)) tags.push('w-2');
+    if (/federal/i.test(searchText)) tags.push('federal');
+    if (/state.*tax|state.*return/i.test(searchText)) tags.push('state');
+    if (/return/i.test(searchText)) tags.push('return');
+  } else if (category === 'work') {
+    if (/pay.?stub|payslip/i.test(searchText)) tags.push('pay-stub');
+    if (/w-?4/i.test(searchText)) tags.push('w-4');
+    const yearMatch = searchText.match(/\b(20\d{2})\b/);
+    if (yearMatch) tags.push(yearMatch[0]);
+  } else if (category === 'medical') {
+    if (/lab|blood|panel|specimen/i.test(searchText)) tags.push('lab-results');
+    if (/rx|prescription/i.test(searchText)) tags.push('prescription');
+    if (/vaccine|vaccination/i.test(searchText)) tags.push('vaccination');
+    const yearMatch = searchText.match(/\b(20\d{2})\b/);
+    if (yearMatch) tags.push(yearMatch[0]);
+  } else if (category === 'insurance') {
+    if (/health|medical/i.test(searchText)) tags.push('health');
+    if (/auto|car|vehicle/i.test(searchText)) tags.push('auto');
+    if (/home|property/i.test(searchText)) tags.push('home');
+    if (/life/i.test(searchText)) tags.push('life');
+  }
+
   if (tags.length === 0) tags.push('review');
 
   return {
     suggestedTitle: baseTitle.slice(0, 120),
     suggestedFolderName: CATEGORY_FOLDER[category],
     category,
-    tags,
+    tags: tags.slice(0, 5),
     source: 'heuristic',
   };
 }
@@ -161,11 +264,29 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
 async function extractPdfText(base64: string): Promise<string> {
   try {
     const buffer = Buffer.from(base64, 'base64');
-    const result = await pdfParse(buffer, { max: 10 });
+    const result = await pdfParse(buffer, { max: 15 });
     return result.text?.trim() ?? '';
   } catch {
     return '';
   }
+}
+
+async function requestClaudeTextOnly(client: Anthropic, input: {
+  schemaPrompt: string;
+  contextLabel?: string;
+  ocrText: string;
+}) {
+  const prompt = [
+    input.schemaPrompt,
+    input.contextLabel ? `\n\nFilename hint: ${input.contextLabel}` : '',
+    `\n\nDocument text:\n${input.ocrText.slice(0, 12000)}`,
+  ].join('');
+  return client.messages.create({
+    model: DEFAULT_ANTHROPIC_MODEL,
+    max_tokens: 512,
+    system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+    messages: [{ role: 'user', content: prompt }],
+  });
 }
 
 function buildSchemaPrompt(existingFolders?: string[]): string {
@@ -237,21 +358,33 @@ export async function suggestDocument(input: {
     let usage: { input_tokens: number; output_tokens: number } | undefined;
 
     if (hasPdf) {
-      // Send the PDF directly — Claude reads it natively without text extraction
-      const response = await client.messages.create({
-        model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 512,
-        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.pdfBase64 } },
-            { type: 'text', text: `${schemaPrompt}${contextLabel ? `\n\nFilename hint: ${contextLabel}` : ''}` },
-          ] as unknown as Anthropic.MessageParam['content'],
-        }],
-      });
-      rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
-      usage = response.usage;
+      const pdfBase64 = input.pdfBase64!;
+      // Try sending the PDF natively — Claude reads it without text extraction.
+      // If Claude rejects it (>100 pages, encrypted, malformed), fall back to
+      // extracting text with pdf-parse and sending that instead.
+      try {
+        const response = await client.messages.create({
+          model: DEFAULT_ANTHROPIC_MODEL,
+          max_tokens: 512,
+          system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+              { type: 'text', text: `${schemaPrompt}${contextLabel ? `\n\nFilename hint: ${contextLabel}` : ''}` },
+            ] as unknown as Anthropic.MessageParam['content'],
+          }],
+        });
+        rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+        usage = response.usage;
+      } catch (pdfErr) {
+        // Attempt text extraction; re-throw if we have nothing to send to Claude.
+        const extractedText = ocrText || await extractPdfText(pdfBase64);
+        if (!extractedText) throw pdfErr;
+        const response = await requestClaudeTextOnly(client, { schemaPrompt, contextLabel, ocrText: extractedText });
+        rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+        usage = response.usage;
+      }
 
     } else if (hasImage) {
       // Send the image directly — Claude reads it with vision

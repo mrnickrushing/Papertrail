@@ -42,15 +42,29 @@ after(async () => {
 
 test('documentKey nests under user email with readable folder names', () => {
   assert.equal(
-    documentKey('doc-1', 'application/pdf', 'Car Insurance 2026', 'User@Example.com'),
-    'user@example.com/Car Insurance 2026/Car Insurance 2026.pdf',
+    documentKey(
+      'doc-1',
+      'application/pdf',
+      'Car Insurance 2026',
+      'User@Example.com',
+      'insurance',
+      'Nicholas Rushing',
+    ),
+    'user@example.com/insurance/Nicholas Rushing/Car Insurance 2026.pdf',
   );
 });
 
 test('documentKey strips unsafe characters from title and email', () => {
   assert.equal(
-    documentKey('doc-1', 'image/jpeg', 'Re/ce*ipt: #42', 'jo hn@example.com'),
-    'jo_hn@example.com/Re_ce_ipt_ _42/Re_ce_ipt_ _42.jpeg',
+    documentKey(
+      'doc-1',
+      'image/jpeg',
+      'Re/ce*ipt: #42',
+      'jo hn@example.com',
+      'Medical Records',
+      'Ni/ck *Rushing',
+    ),
+    'jo_hn@example.com/medical_records/Ni_ck _Rushing/Re_ce_ipt_ _42.jpeg',
   );
 });
 
@@ -140,6 +154,43 @@ test('AI suggestion endpoint uses filename when OCR text is missing', async () =
   assert.equal(res.json().category, 'warranty');
   assert.equal(res.json().suggestedTitle, 'Acme Warranty');
   assert.ok(res.json().tags.includes('warranty'));
+});
+
+test('AI suggestion endpoint extracts a person subfolder for birth certificates', async () => {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v1/ai/suggest-document',
+    headers: { Authorization: 'Bearer test-key' },
+    payload: {
+      title: 'Birth Certificate',
+      ocrText: 'CERTIFICATE OF LIVE BIRTH\nNAME OF CHILD\nJACOB ELI RUSHING\nDATE OF BIRTH\n2024-02-10',
+      mimeType: 'application/pdf',
+    },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().category, 'id');
+  assert.equal(res.json().suggestedFolderName, 'IDs');
+  assert.equal(res.json().suggestedSubfolderName, 'Jacob Eli Rushing');
+  assert.equal(res.json().suggestedTitle, 'Birth Certificate - Jacob Eli Rushing');
+});
+
+test('AI suggestion endpoint handles lowercase person names in OCR text', async () => {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/v1/ai/suggest-document',
+    headers: { Authorization: 'Bearer test-key' },
+    payload: {
+      title: 'Driver License',
+      ocrText: 'name\nnick a rushing\ndob 2026-06-01',
+      mimeType: 'image/jpeg',
+    },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().category, 'id');
+  assert.equal(res.json().suggestedSubfolderName, 'Nick A Rushing');
+  assert.equal(res.json().suggestedTitle, 'Driver License - Nick A Rushing');
 });
 
 test('share links enforce passwords and list created links', async () => {

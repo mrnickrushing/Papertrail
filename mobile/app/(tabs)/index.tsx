@@ -19,6 +19,8 @@ import * as FileSystem from 'expo-file-system';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore, useDocumentStore, useProStore } from '@/store';
+import { TourBubble } from '@/components/TourBubble';
+import { useTourTip } from '@/hooks/useTourTip';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
 import { getFileSize } from '@/services/fileStorage';
 import { createSampleDocument } from '@/services/sampleDocument';
@@ -36,6 +38,7 @@ import { HealthRing } from '@/components/HealthRing';
 import { Colors, Typography, Spacing } from '@/theme';
 import { C, T, S, R } from '@/theme/tokens';
 import type { SearchFilters, DocumentCategory, Document } from '@/types/document';
+import type { SyncPhase } from '@/store/documentStore';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -62,6 +65,8 @@ const CATEGORIES = [
   { key: 'pet',        label: 'Pets',       color: C.category.pet },
 ] as const;
 
+const COMMON_CATEGORY_KEYS = ['receipt', 'bill', 'contract', 'id', 'medical', 'tax'] as const;
+
 const SORT_LABELS: Record<ReturnType<typeof useAppStore.getState>['sortBy'], string> = {
   updatedAt: 'Modified',
   createdAt: 'Added',
@@ -75,6 +80,67 @@ const SORT_ICONS: Record<ReturnType<typeof useAppStore.getState>['sortBy'], Reac
   title: 'type',
   category: 'tag',
 };
+
+function formatSyncAge(value: string | null): string {
+  if (!value) return 'Not synced yet';
+  const deltaMs = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(deltaMs) || deltaMs < 0) return 'Just now';
+  const minutes = Math.floor(deltaMs / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(value).toLocaleDateString();
+}
+
+function syncBadgeMeta(phase: SyncPhase, pendingCount: number): {
+  label: string;
+  detail: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+  tone: 'success' | 'warning' | 'danger' | 'neutral';
+} {
+  if (phase === 'syncing') {
+    return {
+      label: 'Syncing',
+      detail: pendingCount > 0 ? `${pendingCount} pending` : 'Updating cloud copy',
+      icon: 'refresh-cw',
+      tone: 'warning',
+    };
+  }
+  if (phase === 'error') {
+    return {
+      label: 'Sync failed',
+      detail: pendingCount > 0 ? `${pendingCount} pending` : 'Tap to retry',
+      icon: 'alert-circle',
+      tone: 'danger',
+    };
+  }
+  if (pendingCount > 0) {
+    return {
+      label: 'Needs sync',
+      detail: `${pendingCount} pending`,
+      icon: 'cloud-off',
+      tone: 'warning',
+    };
+  }
+  if (phase === 'success') {
+    return {
+      label: 'Synced',
+      detail: 'Cloud copy current',
+      icon: 'cloud',
+      tone: 'success',
+    };
+  }
+  return {
+    label: 'Local only',
+    detail: 'Pull to sync',
+    icon: 'hard-drive',
+    tone: 'neutral',
+  };
+}
 
 export default function VaultScreen() {
   const router = useRouter();
@@ -92,12 +158,15 @@ export default function VaultScreen() {
   const bulkMove = useDocumentStore(s => s.bulkMove);
   const bulkSetTags = useDocumentStore(s => s.bulkSetTags);
   const deleteDocument = useDocumentStore(s => s.deleteDocument);
+  const deletedDocumentIds = useDocumentStore(s => s.deletedDocumentIds);
+  const deletedFolderIds = useDocumentStore(s => s.deletedFolderIds);
   const toggleFavorite = useDocumentStore(s => s.toggleFavorite);
   const updateDocument = useDocumentStore(s => s.updateDocument);
   const updateDocumentTags = useDocumentStore(s => s.updateDocumentTags);
   const moveDocumentToFolder = useDocumentStore(s => s.moveDocumentToFolder);
   const findOrCreateFolder = useDocumentStore(s => s.findOrCreateFolder);
   const syncWithBackend = useDocumentStore(s => s.syncWithBackend);
+  const syncState = useDocumentStore(s => s.syncState);
 
   const sortBy = useAppStore(s => s.sortBy);
   const sortDir = useAppStore(s => s.sortDir);
@@ -160,6 +229,22 @@ export default function VaultScreen() {
     return docs;
   }, [documents, filters, sortBy, sortDir]);
 
+  const pendingSyncCount = useMemo(() => {
+    const lastSuccessful = syncState.lastSuccessfulSyncAt;
+    const pendingDocs = lastSuccessful
+      ? documents.filter((doc) => doc.updatedAt > lastSuccessful).length
+      : documents.length;
+    const pendingFolders = lastSuccessful
+      ? folders.filter((folder) => folder.updatedAt > lastSuccessful).length
+      : folders.length;
+    return pendingDocs + pendingFolders + deletedDocumentIds.length + deletedFolderIds.length;
+  }, [documents, folders, deletedDocumentIds.length, deletedFolderIds.length, syncState.lastSuccessfulSyncAt]);
+
+  const syncMeta = useMemo(
+    () => syncBadgeMeta(syncState.phase, pendingSyncCount),
+    [syncState.phase, pendingSyncCount],
+  );
+
   // Docs without a folder
   const unfiledCount = useMemo(
     () => documents.filter(d => !d.folderId).length,
@@ -175,6 +260,13 @@ export default function VaultScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [isAiOrganizing, setIsAiOrganizing] = useState(false);
   const [aiOrganizeProgress, setAiOrganizeProgress] = useState<{ done: number; total: number } | null>(null);
+  const [showAllCategoryFilters, setShowAllCategoryFilters] = useState(false);
+
+  React.useEffect(() => {
+    if (filters.category && !COMMON_CATEGORY_KEYS.includes(filters.category as typeof COMMON_CATEGORY_KEYS[number])) {
+      setShowAllCategoryFilters(true);
+    }
+  }, [filters.category]);
 
   const enterSelectionMode = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -454,65 +546,120 @@ export default function VaultScreen() {
         title={selectionMode ? `${selectedIds.size} selected` : 'FileTrail'}
         subtitle={selectionMode ? undefined : `${visibleDocuments.length} document${visibleDocuments.length !== 1 ? 's' : ''}`}
         subtitleAccessory={
-          selectionMode || documents.length === 0 ? undefined : <HealthRing documents={documents} size={22} strokeWidth={2.5} />
+          selectionMode || documents.length === 0 ? undefined : <HealthRing documents={documents} size={18} strokeWidth={2.25} compact />
         }
         right={
           selectionMode ? (
             <Pressable onPress={selectAll} hitSlop={8}>
               <Text style={styles.selectAllBtn}>Select All</Text>
             </Pressable>
-          ) : (
-            <View style={styles.headerControls}>
-              <Pressable
-                style={styles.headerControlBtn}
-                hitSlop={8}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  const order: typeof sortBy[] = ['updatedAt', 'createdAt', 'title', 'category'];
-                  const next = order[(order.indexOf(sortBy) + 1) % order.length];
-                  setSortBy(next);
-                }}
-                accessibilityLabel={`Sort by ${sortBy}`}
-                accessibilityRole="button"
-              >
-                <Feather name={SORT_ICONS[sortBy]} size={14} color={C.ash} />
-                <Text style={styles.headerControlText}>{SORT_LABELS[sortBy]}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.headerControlBtn, styles.headerControlDivider]}
-                hitSlop={8}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
-                }}
-                accessibilityLabel={sortDir === 'desc' ? 'Sort descending' : 'Sort ascending'}
-                accessibilityRole="button"
-              >
-                <Feather name={sortDir === 'desc' ? 'arrow-down' : 'arrow-up'} size={15} color={C.ash} />
-              </Pressable>
-              <Pressable
-                style={[styles.headerControlBtn, styles.headerControlDivider]}
-                hitSlop={8}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setViewMode(viewMode === 'card' ? 'list' : 'card');
-                }}
-                accessibilityLabel={viewMode === 'card' ? 'Switch to list view' : 'Switch to card view'}
-                accessibilityRole="button"
-              >
-                <Feather name={viewMode === 'card' ? 'list' : 'grid'} size={15} color={C.ash} />
-              </Pressable>
-            </View>
-          )
+          ) : undefined
         }
       />
 
+      {!selectionMode && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.headerToolbarScroll}
+        >
+          <View style={styles.headerControls}>
+            <Pressable
+              style={[styles.headerControlBtn, styles.headerControlFoldersBtn]}
+              hitSlop={8}
+              onPress={() => router.push('/(tabs)/folders')}
+              accessibilityLabel="Open folders"
+              accessibilityRole="button"
+            >
+              <Feather name="folder" size={15} color={C.amber} />
+              <Text style={[styles.headerControlText, styles.headerFolderText]}>Folders</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.headerControlBtn, styles.headerControlDivider]}
+              hitSlop={8}
+              onPress={() => {
+                Haptics.selectionAsync();
+                const order: typeof sortBy[] = ['updatedAt', 'createdAt', 'title', 'category'];
+                const next = order[(order.indexOf(sortBy) + 1) % order.length];
+                setSortBy(next);
+              }}
+              accessibilityLabel={`Sort by ${sortBy}`}
+              accessibilityRole="button"
+            >
+              <Feather name={SORT_ICONS[sortBy]} size={14} color={C.ash} />
+              <Text style={styles.headerControlText}>{SORT_LABELS[sortBy]}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.headerControlBtn, styles.headerControlDivider]}
+              hitSlop={8}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
+              }}
+              accessibilityLabel={sortDir === 'desc' ? 'Sort descending' : 'Sort ascending'}
+              accessibilityRole="button"
+            >
+              <Feather name={sortDir === 'desc' ? 'arrow-down' : 'arrow-up'} size={15} color={C.ash} />
+            </Pressable>
+            <Pressable
+              style={[styles.headerControlBtn, styles.headerControlDivider]}
+              hitSlop={8}
+              onPress={() => {
+                Haptics.selectionAsync();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setViewMode(viewMode === 'card' ? 'list' : 'card');
+              }}
+              accessibilityLabel={viewMode === 'card' ? 'Switch to list view' : 'Switch to card view'}
+              accessibilityRole="button"
+            >
+              <Feather name={viewMode === 'card' ? 'list' : 'grid'} size={15} color={C.ash} />
+            </Pressable>
+          </View>
+        </ScrollView>
+      )}
+
       {/* Filter bar */}
+      {!selectionMode && (
+        <Pressable
+          style={[
+            styles.syncBadge,
+            syncMeta.tone === 'success' && styles.syncBadgeSuccess,
+            syncMeta.tone === 'warning' && styles.syncBadgeWarning,
+            syncMeta.tone === 'danger' && styles.syncBadgeDanger,
+          ]}
+          onPress={() => {
+            if (syncState.phase === 'syncing') return;
+            void onRefresh();
+          }}
+          disabled={syncState.phase === 'syncing'}
+          accessibilityRole="button"
+          accessibilityLabel={`${syncMeta.label}. ${syncMeta.detail}. Last sync ${formatSyncAge(syncState.lastSuccessfulSyncAt)}.`}
+        >
+          <View style={styles.syncBadgeMain}>
+            <Feather name={syncMeta.icon} size={14} color={syncMeta.tone === 'success' ? C.success : syncMeta.tone === 'danger' ? C.danger : syncMeta.tone === 'warning' ? C.amber : C.ash} />
+            <Text
+              style={[
+                styles.syncBadgeLabel,
+                syncMeta.tone === 'success' && styles.syncBadgeLabelSuccess,
+                syncMeta.tone === 'warning' && styles.syncBadgeLabelWarning,
+                syncMeta.tone === 'danger' && styles.syncBadgeLabelDanger,
+              ]}
+            >
+              {syncMeta.label}
+            </Text>
+          </View>
+          <Text style={styles.syncBadgeDetail}>
+            {syncMeta.detail} • {formatSyncAge(syncState.lastSuccessfulSyncAt)}
+          </Text>
+        </Pressable>
+      )}
+
       <FilterBar
         filters={filters}
         allTags={allTags}
+        showAllCategories={showAllCategoryFilters}
         onCategoryChange={(cat) => setFilters({ ...filters, category: cat })}
+        onToggleCategoryVisibility={() => setShowAllCategoryFilters((value) => !value)}
         onToggleFavorite={toggleFavoriteFilter}
         onToggleTag={toggleTagFilter}
       />
@@ -659,7 +806,38 @@ export default function VaultScreen() {
           }}
         />
       )}
+
+      {/* ── Onboarding tour tips ── */}
+      <VaultTourTips />
     </View>
+  );
+}
+
+function VaultTourTips() {
+  const { visible: fabVisible, dismiss: dismissFab }       = useTourTip('vault-fab');
+  const { visible: filterVisible, dismiss: dismissFilter } = useTourTip('vault-filter');
+  const insets = useSafeAreaInsets();
+  // Position above the floating tab bar + FAB stack
+  const fabTipBottom = Math.max(insets.bottom, 8) + 8 + 62 + 56 + 20;
+  return (
+    <>
+      <TourBubble
+        title="Capture your first document"
+        body="Tap + to photograph a receipt, contract, ID, or any document. AI organises it automatically."
+        visible={fabVisible}
+        onDismiss={dismissFab}
+        anchor={{ bottom: fabTipBottom, right: 12 }}
+        arrow="bottom-right"
+      />
+      <TourBubble
+        title="Filter your vault"
+        body="Tap a category chip to filter by type. Long-press any document to select multiple at once."
+        visible={filterVisible}
+        onDismiss={dismissFilter}
+        anchor={{ top: 230, left: 12 }}
+        arrow="top-left"
+      />
+    </>
   );
 }
 
@@ -668,23 +846,37 @@ export default function VaultScreen() {
 interface FilterBarProps {
   filters: SearchFilters;
   allTags: string[];
+  showAllCategories: boolean;
   onCategoryChange: (cat: (typeof CATEGORIES)[number]['key']) => void;
+  onToggleCategoryVisibility: () => void;
   onToggleFavorite: () => void;
   onToggleTag: (tag: string) => void;
 }
 
-function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onToggleTag }: FilterBarProps) {
+function FilterBar({
+  filters,
+  allTags,
+  showAllCategories,
+  onCategoryChange,
+  onToggleCategoryVisibility,
+  onToggleFavorite,
+  onToggleTag,
+}: FilterBarProps) {
   const activeCategory = filters.category;
   const activeTags = filters.tags ?? [];
   const favoriteActive = !!filters.isFavorite;
+  const visibleCategories = showAllCategories
+    ? CATEGORIES
+    : CATEGORIES.filter((category) => category.key === undefined || COMMON_CATEGORY_KEYS.includes(category.key as typeof COMMON_CATEGORY_KEYS[number]));
 
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.chips}
+      style={styles.filterBar}
     >
-      {CATEGORIES.map((c) => {
+      {visibleCategories.map((c) => {
         const isActive = activeCategory === c.key;
         const chipColor = c.color ?? C.amber;
         return (
@@ -717,6 +909,17 @@ function FilterBar({ filters, allTags, onCategoryChange, onToggleFavorite, onTog
           </Pressable>
         );
       })}
+
+      <Pressable
+        style={styles.chip}
+        onPress={onToggleCategoryVisibility}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={showAllCategories ? 'Show fewer category filters' : 'Show all category filters'}
+      >
+        <Feather name={showAllCategories ? 'chevron-left' : 'more-horizontal'} size={12} color={C.ash} />
+        <Text style={styles.chipText}>{showAllCategories ? 'Less' : 'More'}</Text>
+      </Pressable>
 
       <View style={styles.chipDivider} />
 
@@ -783,6 +986,10 @@ const styles = StyleSheet.create({
     borderColor: C.ink3,
     overflow: 'hidden',
   },
+  headerToolbarScroll: {
+    paddingHorizontal: S[6],
+    paddingBottom: S[3],
+  },
   headerControlBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -791,6 +998,9 @@ const styles = StyleSheet.create({
     paddingVertical: S[1],
     minHeight: 32,
     justifyContent: 'center',
+  },
+  headerControlFoldersBtn: {
+    paddingHorizontal: S[3],
   },
   headerControlDivider: {
     borderLeftWidth: 1,
@@ -801,13 +1011,20 @@ const styles = StyleSheet.create({
     color: C.ash,
     fontWeight: '600',
   },
+  headerFolderText: {
+    color: C.amber,
+  },
   chips: {
     flexDirection:  'row',
     paddingHorizontal: Spacing['5'],
+    paddingTop: Spacing['1'],
     paddingBottom:  Spacing['3'],
     gap:            Spacing['2'],
     flexWrap:       'nowrap',
     alignItems:     'center',
+  },
+  filterBar: {
+    marginTop: Spacing['1'],
   },
   chipDivider: {
     width: 1,
@@ -848,6 +1065,58 @@ const styles = StyleSheet.create({
     color:      Colors.textMuted,
   },
   chipTagTextActive: { color: C.amber },
+  syncBadge: {
+    marginHorizontal: Spacing['4'],
+    marginBottom: Spacing['3'],
+    paddingHorizontal: S[3],
+    paddingVertical: S[2],
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.ink3,
+    backgroundColor: C.ink2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S[3],
+  },
+  syncBadgeSuccess: {
+    backgroundColor: C.success + '14',
+    borderColor: C.success + '33',
+  },
+  syncBadgeWarning: {
+    backgroundColor: C.amberDim,
+    borderColor: C.amber + '33',
+  },
+  syncBadgeDanger: {
+    backgroundColor: C.danger + '14',
+    borderColor: C.danger + '33',
+  },
+  syncBadgeMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+    minWidth: 0,
+  },
+  syncBadgeLabel: {
+    fontSize: T.sm,
+    fontWeight: '700',
+    color: C.cream,
+  },
+  syncBadgeLabelSuccess: {
+    color: C.success,
+  },
+  syncBadgeLabelWarning: {
+    color: C.amber,
+  },
+  syncBadgeLabelDanger: {
+    color: C.danger,
+  },
+  syncBadgeDetail: {
+    flexShrink: 1,
+    fontSize: T.xs,
+    color: C.ash,
+    textAlign: 'right',
+  },
   unfiledBanner: {
     flexDirection: 'row',
     alignItems: 'center',

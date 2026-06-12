@@ -13,11 +13,18 @@ import { MMKV } from 'react-native-mmkv';
 import { nanoid } from 'nanoid/non-secure';
 import type { Document, Folder, SearchFilters, SearchResult } from '@/types/document';
 import * as FileSystem from 'expo-file-system';
-import { deleteDocumentFiles, repairStoredUri, uploadDocumentToR2, downloadDocumentFromR2, getExtension } from '@/services/fileStorage';
+import {
+  buildPreferredStorageKey,
+  checkDocumentsInR2,
+  deleteDocumentFiles,
+  repairStoredUri,
+  uploadDocumentToR2,
+  downloadDocumentFromR2,
+  getExtension,
+} from '@/services/fileStorage';
 import { enqueueOCR, dequeueOCR } from '@/services/ocrQueue';
 import { syncMetadata, type Tombstone } from '@/services/syncService';
 import { Colors } from '@/theme';
-import { useProStore } from './proStore';
 import { useAppStore } from './appStore';
 
 const DOCUMENTS_STORE_KEY = 'filetrail-documents-v2';
@@ -82,6 +89,15 @@ const OCR_STATUSES = new Set<Document['ocrStatus']>([
   'unavailable',
 ]);
 
+export type SyncPhase = 'idle' | 'syncing' | 'success' | 'error';
+
+export type SyncState = {
+  phase: SyncPhase;
+  lastSuccessfulSyncAt: string | null;
+  lastAttemptedSyncAt: string | null;
+  lastError: string | null;
+};
+
 interface DocumentState {
   documents: Document[];
   folders: Folder[];
@@ -90,6 +106,7 @@ interface DocumentState {
   isLoading: boolean;
   error: string | null;
   filters: SearchFilters;
+  syncState: SyncState;
 
   // Compatibility no-ops for screens that refresh from a backing store.
   loadDocuments: () => Promise<void>;
@@ -227,6 +244,25 @@ function sanitizeFolder(value: unknown): Folder | null {
 
 function sanitizePersistedState(value: unknown): Partial<DocumentState> {
   if (!isRecord(value)) return {};
+  const syncState = isRecord(value.syncState)
+    ? {
+      phase:
+        value.syncState.phase === 'syncing' ||
+        value.syncState.phase === 'success' ||
+        value.syncState.phase === 'error'
+          ? value.syncState.phase
+          : 'idle',
+      lastSuccessfulSyncAt:
+        typeof value.syncState.lastSuccessfulSyncAt === 'string'
+          ? value.syncState.lastSuccessfulSyncAt
+          : null,
+      lastAttemptedSyncAt:
+        typeof value.syncState.lastAttemptedSyncAt === 'string'
+          ? value.syncState.lastAttemptedSyncAt
+          : null,
+      lastError: typeof value.syncState.lastError === 'string' ? value.syncState.lastError : null,
+    } satisfies SyncState
+    : undefined;
   return {
     documents: Array.isArray(value.documents)
       ? value.documents.map(sanitizeDocument).filter((doc): doc is Document => doc !== null)
@@ -236,6 +272,7 @@ function sanitizePersistedState(value: unknown): Partial<DocumentState> {
       : [],
     deletedDocumentIds: stringArrayValue(value.deletedDocumentIds),
     deletedFolderIds: stringArrayValue(value.deletedFolderIds),
+    ...(syncState ? { syncState } : {}),
   };
 }
 
@@ -331,6 +368,12 @@ export const useDocumentStore = create<DocumentState>()(
       isLoading: false,
       error: null,
       filters: {},
+      syncState: {
+        phase: 'idle',
+        lastSuccessfulSyncAt: null,
+        lastAttemptedSyncAt: null,
+        lastError: null,
+      },
 
       loadDocuments: async () => undefined,
       loadFolders: async () => undefined,
@@ -367,15 +410,19 @@ export const useDocumentStore = create<DocumentState>()(
         if (isImage && doc.ocrStatus === 'pending') {
           enqueueOCR(doc.id, doc.fileUri);
         }
-        // Upload to R2 for Pro users (fire-and-forget; local file is already saved)
-        const isPro = useProStore.getState().isPro;
-        if (isPro && doc.fileUri) {
+        // Upload to R2 whenever backend storage is available. The local file is
+        // already saved, so a cloud upload failure stays non-fatal and is
+        // retried on the next sync cycle.
+        if (doc.fileUri) {
+          const accountProfile = useAppStore.getState().accountProfile;
           uploadDocumentToR2({
             documentId: doc.id,
             localUri: doc.fileUri,
             mimeType: doc.mimeType,
             fileName: doc.title,
-            userEmail: useAppStore.getState().accountProfile?.email,
+            userEmail: accountProfile?.email,
+            category: doc.category,
+            ownerName: accountProfile?.fullName,
           }).then((storageUrl) => {
             if (storageUrl) {
               // Bump updatedAt so the incremental sync push picks this up —
@@ -437,13 +484,46 @@ export const useDocumentStore = create<DocumentState>()(
       },
 
       syncWithBackend: async () => {
-        // Before syncing metadata, upload any existing documents that are
-        // missing a storageUrl (Pro users with pre-existing vault files).
-        const isPro = useProStore.getState().isPro;
-        if (isPro) {
-          const missing = get().documents.filter(
-            (d) => d.fileUri && !d.storageUrl
-          );
+        set((s) => ({
+          syncState: {
+            ...s.syncState,
+            phase: 'syncing',
+            lastAttemptedSyncAt: nowIso(),
+            lastError: null,
+          },
+        }));
+        try {
+        // Before syncing metadata, make sure any local files are actually
+        // present in R2. Older builds could leave behind storageUrl metadata
+        // even when the object upload never completed, so we verify existence
+        // and re-upload any missing objects here.
+        {
+          const localDocs = get().documents.filter((d) => d.fileUri);
+          const keyedDocs = localDocs.filter((d) => d.storageUrl);
+          const accountProfile = useAppStore.getState().accountProfile;
+          const existence = keyedDocs.length > 0
+            ? await checkDocumentsInR2(
+              keyedDocs.map((doc) => ({
+                documentId: doc.id,
+                storageKey: doc.storageUrl?.replace(/^r2:\/\/[^/]+\//, ''),
+              })),
+            )
+            : new Map<string, boolean>();
+          const missing = localDocs.filter((doc) => {
+            const desiredKey = buildPreferredStorageKey({
+              documentId: doc.id,
+              mimeType: doc.mimeType,
+              fileName: doc.title,
+              userEmail: accountProfile?.email,
+              category: doc.category,
+              ownerName: accountProfile?.fullName,
+            });
+            const currentKey = doc.storageUrl?.replace(/^r2:\/\/[^/]+\//, '');
+            if (!currentKey) return true;
+            if (currentKey !== desiredKey) return true;
+            return existence.get(doc.id) === false;
+          });
+
           // Upload sequentially to avoid hammering presigned URL requests
           for (const doc of missing) {
             try {
@@ -459,12 +539,15 @@ export const useDocumentStore = create<DocumentState>()(
               const info = await FileSystem.getInfoAsync(localUri);
               if (!info.exists) continue;
 
+              const accountProfile = useAppStore.getState().accountProfile;
               const storageUrl = await uploadDocumentToR2({
                 documentId: doc.id,
                 localUri,
                 mimeType: doc.mimeType,
                 fileName: doc.title,
-                userEmail: useAppStore.getState().accountProfile?.email,
+                userEmail: accountProfile?.email,
+                category: doc.category,
+                ownerName: accountProfile?.fullName,
               });
               if (storageUrl) {
                 // updatedAt must advance so the push filter below includes
@@ -489,7 +572,6 @@ export const useDocumentStore = create<DocumentState>()(
           deletedDocumentIds: get().deletedDocumentIds,
           deletedFolderIds: get().deletedFolderIds,
           mergeDocuments: (incoming) => {
-            const isPro = useProStore.getState().isPro;
             set((s) => {
               const localById = new Map(s.documents.map((doc) => [doc.id, doc]));
               for (const doc of incoming) {
@@ -510,34 +592,32 @@ export const useDocumentStore = create<DocumentState>()(
               }
               return { documents: Array.from(localById.values()) };
             });
-            // After merging, download any missing local files from R2 (Pro only).
+            // After merging, download any missing local files from R2.
             // This is the "new device" restore path.
-            if (isPro) {
-              for (const doc of incoming) {
-                if (!doc.storageUrl) continue;
-                // Use current state after merge
-                const merged = get().documents.find((d) => d.id === doc.id);
-                if (!merged || merged.fileUri) continue;
-                const ext = getExtension(doc.mimeType);
-                downloadDocumentFromR2({
-                  documentId: doc.id,
-                  mimeType: doc.mimeType,
-                  extension: ext,
-                  storageKey: doc.storageUrl
-                    ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
-                    : undefined,
-                }).then((localUri) => {
-                  if (localUri) {
-                    set((s) => ({
-                      documents: s.documents.map((d) =>
-                        d.id === doc.id ? { ...d, fileUri: localUri } : d
-                      ),
-                    }));
-                  }
-                }).catch(() => {
-                  // Non-fatal: file may not be in R2 yet
-                });
-              }
+            for (const doc of incoming) {
+              if (!doc.storageUrl) continue;
+              // Use current state after merge
+              const merged = get().documents.find((d) => d.id === doc.id);
+              if (!merged || merged.fileUri) continue;
+              const ext = getExtension(doc.mimeType);
+              downloadDocumentFromR2({
+                documentId: doc.id,
+                mimeType: doc.mimeType,
+                extension: ext,
+                storageKey: doc.storageUrl
+                  ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
+                  : undefined,
+              }).then((localUri) => {
+                if (localUri) {
+                  set((s) => ({
+                    documents: s.documents.map((d) =>
+                      d.id === doc.id ? { ...d, fileUri: localUri } : d
+                    ),
+                  }));
+                }
+              }).catch(() => {
+                // Non-fatal: file may not be in R2 yet
+              });
             }
           },
           mergeFolders: (incoming) => {
@@ -585,6 +665,24 @@ export const useDocumentStore = create<DocumentState>()(
             }));
           },
         });
+          set((s) => ({
+            syncState: {
+              ...s.syncState,
+              phase: 'success',
+              lastSuccessfulSyncAt: nowIso(),
+              lastError: null,
+            },
+          }));
+        } catch (error) {
+          set((s) => ({
+            syncState: {
+              ...s.syncState,
+              phase: 'error',
+              lastError: error instanceof Error ? error.message : 'Sync failed',
+            },
+          }));
+          throw error;
+        }
       },
 
       deleteDocument: async (id) => {
@@ -791,6 +889,7 @@ export const useDocumentStore = create<DocumentState>()(
         folders: state.folders,
         deletedDocumentIds: state.deletedDocumentIds,
         deletedFolderIds: state.deletedFolderIds,
+        syncState: state.syncState,
       }),
     }
   )

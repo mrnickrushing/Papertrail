@@ -94,6 +94,18 @@ function describeOcrResult(text: string | null): string {
   return `${trimmed.split(/\s+/).length} words extracted`;
 }
 
+function inferImageMimeType(uri?: string, mimeType?: string): string | undefined {
+  if (mimeType?.startsWith('image/')) return mimeType;
+  const lower = uri?.toLowerCase() ?? '';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.heic')) return 'image/heic';
+  if (lower.endsWith('.heif')) return 'image/heif';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  return uri ? 'image/jpeg' : undefined;
+}
+
 type OcrStatusDisplay =
   | { kind: 'spinner'; label: string }
   | { kind: 'done'; icon: string; label: string }
@@ -155,6 +167,7 @@ export default function DocumentReviewScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const isMounted = useRef(true);
+  const inferredImageMimeType = inferImageMimeType(params.uri, params.mimeType);
 
   // Free users at the document limit can't save anyway — show the paywall
   // immediately instead of burning OCR/AI tokens on a doc that can't be kept.
@@ -281,7 +294,15 @@ export default function DocumentReviewScreen() {
             usage?: { inputTokens: number; outputTokens: number; costUsd: number };
           }>('/v1/ai/suggest-document', {
             method: 'POST',
-            body: { title, filename: params.name, mimeType: params.mimeType, imageBase64, imageMimeType: imageBase64 ? params.mimeType : undefined, anthropicApiKey: getAnthropicApiKey() ?? undefined, existingFolders: folders.filter(f => !f.parentId).map(f => f.name) },
+            body: {
+              title,
+              filename: params.name,
+              mimeType: params.mimeType ?? inferredImageMimeType,
+              imageBase64,
+              imageMimeType: imageBase64 ? inferredImageMimeType : undefined,
+              anthropicApiKey: getAnthropicApiKey() ?? undefined,
+              existingFolders: folders.filter(f => !f.parentId).map(f => f.name),
+            },
           })
         ).then((suggestion) => {
           if (!isMounted.current) return;
@@ -320,9 +341,9 @@ export default function DocumentReviewScreen() {
               body: {
                 title, filename: params.name,
                 ocrText: text || undefined,
-                mimeType: params.mimeType,
+                mimeType: params.mimeType ?? inferredImageMimeType,
                 imageBase64,
-                imageMimeType: imageBase64 ? params.mimeType : undefined,
+                imageMimeType: imageBase64 ? inferredImageMimeType : undefined,
                 anthropicApiKey: getAnthropicApiKey() ?? undefined,
                 existingFolders: folders.filter(f => !f.parentId).map(f => f.name),
               },
@@ -598,6 +619,11 @@ export default function DocumentReviewScreen() {
             <Text style={styles.saveBtnText}>Save Document</Text>
           )}
         </Pressable>
+        {aiStatus === 'processing' && (
+          <Text style={styles.saveHint}>
+            AI is still analysing this document. You can save now, but waiting a moment may improve the title, category, and folder suggestion.
+          </Text>
+        )}
       </ScrollView>
       {showPaywall && (
         <PaywallModal
@@ -788,5 +814,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.ink1,
     letterSpacing: 0.3,
+  },
+  saveHint: {
+    fontSize: T.xs,
+    color: C.ash,
+    textAlign: 'center',
+    marginTop: S[2],
+    marginBottom: S[2],
+    lineHeight: 18,
+    paddingHorizontal: S[2],
   },
 });

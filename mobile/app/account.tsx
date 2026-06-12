@@ -14,7 +14,7 @@ import {
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { useAppStore, useProStore } from '@/store';
+import { useAppStore, useProStore, useTourStore } from '@/store';
 import {
   getAdminProfileDefaults,
   isAdminBypassConfigured,
@@ -65,6 +65,7 @@ export default function AccountScreen() {
   const setAccountAuthenticated = useAppStore((s) => s.setAccountAuthenticated);
   const hasAdminAccess = useProStore((s) => s.hasAdminAccess);
   const setAdminAccess = useProStore((s) => s.setAdminAccess);
+  const startTour = useTourStore((s) => s.startTour);
 
   const [mode, setMode] = useState<AuthMode>(accountProfile ? 'login' : 'create');
   const [fullName, setFullName] = useState(accountProfile?.fullName ?? '');
@@ -212,6 +213,7 @@ export default function AccountScreen() {
       createdAt: new Date().toISOString(),
     };
     completeAccountSetup(newProfile);
+    startTour();
 
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     const regResult = await registerUserWithBackend({
@@ -335,6 +337,7 @@ export default function AccountScreen() {
       createdAt: new Date().toISOString(),
     });
     setAdminAccess(true);
+    startTour();
     setOwnerCode('');
   }
 
@@ -379,6 +382,7 @@ export default function AccountScreen() {
           createdAt: new Date().toISOString(),
         };
         completeAccountSetup(appleProfile);
+        startTour();
         // Register Apple user on backend (fire-and-forget — local auth already set)
         const appleId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
         registerUserWithBackend({

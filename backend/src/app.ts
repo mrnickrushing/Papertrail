@@ -27,6 +27,7 @@ import {
   getUploadUrl,
   getDownloadUrl,
   documentKey,
+  objectExists,
 } from './r2.js';
 
 function parseBody<T>(schema: { parse: (value: unknown) => T }, body: unknown): T {
@@ -242,10 +243,10 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
 
   /**
    * POST /v1/storage/upload-url
-   * Body: { documentId: string; mimeType: string; fileName?: string; userEmail?: string }
+   * Body: { documentId: string; mimeType: string; fileName?: string; userEmail?: string; category?: string; ownerName?: string }
    * Returns a presigned PUT URL the mobile client uses to upload directly to R2.
    * When userEmail is provided, objects are stored under
-   * {email}/{title}/{title}.{ext}; otherwise the legacy documents/{id}/ path.
+   * {email}/{category}/{owner-name}/{title}.{ext}; otherwise the legacy documents/{id}/ path.
    * Pro gate is enforced on the mobile side (RevenueCat). Backend just needs
    * a valid API key (checked by preHandler when API_KEY env var is set).
    */
@@ -253,17 +254,19 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     if (!r2Client || !r2Config) {
       return reply.code(503).send({ error: 'File storage not configured' });
     }
-    const { documentId, mimeType, fileName, userEmail } = request.body as {
+    const { documentId, mimeType, fileName, userEmail, category, ownerName } = request.body as {
       documentId?: string;
       mimeType?: string;
       fileName?: string;
       userEmail?: string;
+      category?: string;
+      ownerName?: string;
     };
     if (!documentId || !mimeType) {
       return reply.code(400).send({ error: 'documentId and mimeType are required' });
     }
 
-    const key = documentKey(documentId, mimeType, fileName, userEmail);
+    const key = documentKey(documentId, mimeType, fileName, userEmail, category, ownerName);
     const uploadUrl = await getUploadUrl(r2Client, r2Config.bucket, key, mimeType);
     // storageUrl is the stable key path — used as a reference, not a public URL.
     // Files are always accessed via fresh presigned GET URLs.
@@ -281,11 +284,13 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
       return reply.code(503).send({ error: 'File storage not configured' });
     }
     const { documentId } = request.params as { documentId: string };
-    const { mimeType, storageKey, fileName, userEmail } = request.query as {
+    const { mimeType, storageKey, fileName, userEmail, category, ownerName } = request.query as {
       mimeType?: string;
       storageKey?: string;
       fileName?: string;
       userEmail?: string;
+      category?: string;
+      ownerName?: string;
     };
 
     let key: string;
@@ -294,13 +299,70 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
       key = storageKey;
     } else if (mimeType) {
       // Fallback: reconstruct key (works when fileName is also provided)
-      key = documentKey(documentId, mimeType, fileName, userEmail);
+      key = documentKey(documentId, mimeType, fileName, userEmail, category, ownerName);
     } else {
       return reply.code(400).send({ error: 'storageKey or mimeType is required' });
     }
 
     const downloadUrl = await getDownloadUrl(r2Client, r2Config.bucket, key);
     return { downloadUrl };
+  });
+
+  /**
+   * POST /v1/storage/exists
+   * Body: { items: Array<{ documentId: string; storageKey?: string; mimeType?: string; fileName?: string; userEmail?: string; category?: string; ownerName?: string }> }
+   * Returns per-document existence so clients can repair stale storageUrl metadata.
+   */
+  app.post('/v1/storage/exists', async (request, reply) => {
+    if (!r2Client || !r2Config) {
+      return reply.code(503).send({ error: 'File storage not configured' });
+    }
+
+    const { items } = request.body as {
+      items?: Array<{
+        documentId?: string;
+        storageKey?: string;
+        mimeType?: string;
+        fileName?: string;
+        userEmail?: string;
+        category?: string;
+        ownerName?: string;
+      }>;
+    };
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return reply.code(400).send({ error: 'items are required' });
+    }
+
+    const results = await Promise.all(items.map(async (item) => {
+      if (!item.documentId) {
+        return { documentId: '', exists: false, error: 'documentId is required' };
+      }
+
+      let key = item.storageKey;
+      if (!key) {
+        if (!item.mimeType) {
+          return {
+            documentId: item.documentId,
+            exists: false,
+            error: 'storageKey or mimeType is required',
+          };
+        }
+        key = documentKey(
+          item.documentId,
+          item.mimeType,
+          item.fileName,
+          item.userEmail,
+          item.category,
+          item.ownerName,
+        );
+      }
+
+      const exists = await objectExists(r2Client, r2Config.bucket, key);
+      return { documentId: item.documentId, exists, storageKey: key };
+    }));
+
+    return { results };
   });
 
   /**
