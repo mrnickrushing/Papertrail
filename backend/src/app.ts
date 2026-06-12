@@ -198,6 +198,104 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
       .substring(0, 100) || 'document'}.${ext}`;
   }
 
+  function storageDocumentFingerprint(
+    user: { email: string; fullName: string },
+    doc: { id: string; title: string; category: string; mimeType: string; storageUrl?: string },
+  ): string {
+    const storageKey = storageUrlToKey(doc.storageUrl);
+    if (storageKey) return `storage:${storageKey.toLowerCase()}`;
+    return `key:${documentKey(doc.id, doc.mimeType, doc.title, user.email, doc.category, user.fullName).toLowerCase()}`;
+  }
+
+  function pickPreferredDocument(
+    current: {
+      id: string;
+      title: string;
+      category: string;
+      mimeType: string;
+      storageUrl?: string;
+      ownerUserId?: string;
+      ownerEmail?: string;
+      fileUri?: string;
+      thumbnailUri?: string | null;
+      createdAt: string;
+      updatedAt: string;
+      tags: string[];
+      syncVersion?: number;
+    },
+    candidate: typeof current,
+  ): typeof current {
+    const currentSynthetic = current.id.startsWith('email-');
+    const candidateSynthetic = candidate.id.startsWith('email-');
+    if (currentSynthetic !== candidateSynthetic) {
+      return currentSynthetic ? candidate : current;
+    }
+    const currentHasStorage = Boolean(current.storageUrl);
+    const candidateHasStorage = Boolean(candidate.storageUrl);
+    if (currentHasStorage !== candidateHasStorage) {
+      return currentHasStorage ? current : candidate;
+    }
+    return candidate.updatedAt > current.updatedAt ? candidate : current;
+  }
+
+  function mergeDocumentGroup<T extends {
+    id: string;
+    title: string;
+    category: string;
+    mimeType: string;
+    storageUrl?: string;
+    ownerUserId?: string;
+    ownerEmail?: string;
+    fileUri?: string;
+    thumbnailUri?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    tags: string[];
+    syncVersion?: number;
+  }>(current: T, candidate: T): T {
+    const preferred = pickPreferredDocument(current, candidate);
+    return {
+      ...preferred,
+      storageUrl: preferred.storageUrl ?? current.storageUrl ?? candidate.storageUrl,
+      ownerUserId: preferred.ownerUserId ?? current.ownerUserId ?? candidate.ownerUserId,
+      ownerEmail: preferred.ownerEmail ?? current.ownerEmail ?? candidate.ownerEmail,
+      fileUri: preferred.fileUri ?? current.fileUri ?? candidate.fileUri,
+      thumbnailUri: preferred.thumbnailUri ?? current.thumbnailUri ?? candidate.thumbnailUri ?? null,
+      tags: Array.from(new Set([...(current.tags ?? []), ...(candidate.tags ?? [])])),
+      createdAt: current.createdAt < candidate.createdAt ? current.createdAt : candidate.createdAt,
+      updatedAt: current.updatedAt > candidate.updatedAt ? current.updatedAt : candidate.updatedAt,
+      syncVersion: Math.max(current.syncVersion ?? 0, candidate.syncVersion ?? 0),
+    } as T;
+  }
+
+  function dedupeStorageDocuments<T extends {
+    id: string;
+    title: string;
+    category: string;
+    mimeType: string;
+    storageUrl?: string;
+    ownerUserId?: string;
+    ownerEmail?: string;
+    fileUri?: string;
+    thumbnailUri?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    tags: string[];
+    syncVersion?: number;
+  }>(user: { email: string; fullName: string }, docs: T[]): T[] {
+    const byFingerprint = new Map<string, T>();
+    for (const doc of docs) {
+      const fingerprint = storageDocumentFingerprint(user, doc);
+      const existing = byFingerprint.get(fingerprint);
+      if (!existing) {
+        byFingerprint.set(fingerprint, doc);
+      } else {
+        byFingerprint.set(fingerprint, mergeDocumentGroup(existing, doc));
+      }
+    }
+    return Array.from(byFingerprint.values());
+  }
+
   async function attachStorageUrlsForUser(
     user: { id: string; email: string; fullName: string },
     documents: Array<{
@@ -208,6 +306,12 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
       storageUrl?: string;
       ownerUserId?: string;
       ownerEmail?: string;
+      fileUri?: string;
+      thumbnailUri?: string | null;
+      createdAt: string;
+      updatedAt: string;
+      tags: string[];
+      syncVersion?: number;
     }>,
   ): Promise<typeof documents> {
     if (!r2Client || !r2Config) return documents;
@@ -310,7 +414,7 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     };
     return {
       ...result,
-      documents: [...hydratedDocuments, ...bucketDocuments].filter(matchesUser),
+      documents: dedupeStorageDocuments(user, [...hydratedDocuments, ...bucketDocuments].filter(matchesUser)),
       folders: result.folders.filter((folder) => (
         (folder.ownerUserId && folder.ownerUserId === user.id) ||
         (folder.ownerEmail && folder.ownerEmail.toLowerCase() === userEmail)

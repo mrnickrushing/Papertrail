@@ -368,6 +368,77 @@ function removeSynced(existing: string[], synced: string[]): string[] {
   return existing.filter((id) => !syncedSet.has(id));
 }
 
+function storageKeyFromUrl(storageUrl?: string): string | null {
+  if (!storageUrl) return null;
+  const match = storageUrl.match(/^r2:\/\/[^/]+\/(.+)$/i);
+  return match ? match[1] : null;
+}
+
+function documentSyncFingerprint(doc: Document, accountProfile?: { email?: string; fullName?: string }): string {
+  const storageKey = storageKeyFromUrl(doc.storageUrl);
+  if (storageKey) return `storage:${storageKey.toLowerCase()}`;
+  if (accountProfile?.email) {
+    return `key:${buildPreferredStorageKey({
+      documentId: doc.id,
+      mimeType: doc.mimeType,
+      fileName: doc.title,
+      userEmail: accountProfile.email,
+      category: doc.category,
+      ownerName: accountProfile.fullName,
+    }).toLowerCase()}`;
+  }
+  return `id:${doc.id}`;
+}
+
+function mergeDuplicateDocuments(current: Document, candidate: Document): Document {
+  const preferred = current.updatedAt > candidate.updatedAt ? current : candidate;
+  return {
+    ...preferred,
+    fileUri: preferred.fileUri || current.fileUri || candidate.fileUri,
+    thumbnailUri: preferred.thumbnailUri ?? current.thumbnailUri ?? candidate.thumbnailUri ?? null,
+    storageUrl: preferred.storageUrl ?? current.storageUrl ?? candidate.storageUrl,
+    ocrText: preferred.ocrText ?? current.ocrText ?? candidate.ocrText,
+    inferredDate: preferred.inferredDate ?? current.inferredDate ?? candidate.inferredDate,
+    amounts: preferred.amounts ?? current.amounts ?? candidate.amounts,
+    vendor: preferred.vendor ?? current.vendor ?? candidate.vendor,
+    source: preferred.source ?? current.source ?? candidate.source,
+    sourceLabel: preferred.sourceLabel ?? current.sourceLabel ?? candidate.sourceLabel,
+    emailSource: preferred.emailSource ?? current.emailSource ?? candidate.emailSource,
+    facts: preferred.facts ?? current.facts ?? candidate.facts,
+    notes: preferred.notes ?? current.notes ?? candidate.notes,
+    aiSource: preferred.aiSource ?? current.aiSource ?? candidate.aiSource,
+    aiOrganizedAt: preferred.aiOrganizedAt ?? current.aiOrganizedAt ?? candidate.aiOrganizedAt,
+    folderId: preferred.folderId ?? current.folderId ?? candidate.folderId,
+    isFavorite: current.isFavorite || candidate.isFavorite,
+    tags: Array.from(new Set([...(current.tags ?? []), ...(candidate.tags ?? [])])),
+    createdAt: current.createdAt < candidate.createdAt ? current.createdAt : candidate.createdAt,
+    updatedAt: current.updatedAt > candidate.updatedAt ? current.updatedAt : candidate.updatedAt,
+  };
+}
+
+function dedupeDocumentsByFingerprint(
+  documents: Document[],
+  accountProfile?: { email?: string; fullName?: string },
+): { documents: Document[]; removedIds: string[] } {
+  const grouped = new Map<string, Document>();
+  const removedIds: string[] = [];
+
+  for (const doc of documents) {
+    const fingerprint = documentSyncFingerprint(doc, accountProfile);
+    const existing = grouped.get(fingerprint);
+    if (!existing) {
+      grouped.set(fingerprint, doc);
+      continue;
+    }
+    const preferredId = existing.updatedAt >= doc.updatedAt ? existing.id : doc.id;
+    const merged = mergeDuplicateDocuments(existing, doc);
+    grouped.set(fingerprint, merged);
+    removedIds.push(preferredId === existing.id ? doc.id : existing.id);
+  }
+
+  return { documents: Array.from(grouped.values()), removedIds: Array.from(new Set(removedIds.filter(Boolean))) };
+}
+
 function applyFilters(documents: Document[], filters: SearchFilters): Document[] {
   let docs = [...documents];
 
@@ -641,11 +712,26 @@ export const useDocumentStore = create<DocumentState>()(
               return Array.from(localById.values());
             })();
 
-            set({ documents: mergedDocs });
+            const { documents: dedupedDocs, removedIds } = dedupeDocumentsByFingerprint(
+              mergedDocs,
+              accountProfile ?? undefined,
+            );
+            if (removedIds.length > 0) {
+              for (const id of removedIds) dequeueOCR(id);
+              void Promise.all(
+                removedIds.map((id) => deleteDocumentFiles(id).catch(() => undefined))
+              );
+              set((s) => ({
+                documents: dedupedDocs,
+                deletedDocumentIds: appendUnique(s.deletedDocumentIds, removedIds),
+              }));
+            } else {
+              set({ documents: dedupedDocs });
+            }
 
             // After merging, download any missing local files from R2.
             // This is the "new device" restore path.
-            for (const doc of mergedDocs) {
+            for (const doc of dedupedDocs) {
               if (!doc.storageUrl || doc.fileUri) continue;
               const ext = getExtension(doc.mimeType);
                 downloadDocumentFromR2({
