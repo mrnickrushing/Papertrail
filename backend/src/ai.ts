@@ -273,6 +273,30 @@ async function extractPdfText(base64: string): Promise<string> {
   }
 }
 
+function isPdfPageLimitError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /maximum of 100 PDF pages/i.test(message);
+}
+
+async function requestClaudeTextOnly(client: Anthropic, input: {
+  schemaPrompt: string;
+  contextLabel?: string;
+  ocrText: string;
+}) {
+  const prompt = [
+    input.schemaPrompt,
+    input.contextLabel ? `\n\nFilename hint: ${input.contextLabel}` : '',
+    `\n\nDocument text:\n${input.ocrText.slice(0, 12000)}`,
+  ].join('');
+
+  return client.messages.create({
+    model: DEFAULT_ANTHROPIC_MODEL,
+    max_tokens: 512,
+    system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+    messages: [{ role: 'user', content: prompt }],
+  });
+}
+
 function buildSchemaPrompt(existingFolders?: string[]): string {
   const folderGuidance = existingFolders?.length
     ? ` The user already has these folders: ${existingFolders.map(f => `"${f}"`).join(', ')} — if one of them is a good fit for this document, reuse its exact name rather than inventing a new one; only suggest a different name when none of the existing ones fit well.`
@@ -342,21 +366,37 @@ export async function suggestDocument(input: {
     let usage: { input_tokens: number; output_tokens: number } | undefined;
 
     if (hasPdf) {
+      const pdfBase64 = input.pdfBase64!;
       // Send the PDF directly — Claude reads it natively without text extraction
-      const response = await client.messages.create({
-        model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 512,
-        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.pdfBase64 } },
-            { type: 'text', text: `${schemaPrompt}${contextLabel ? `\n\nFilename hint: ${contextLabel}` : ''}` },
-          ] as unknown as Anthropic.MessageParam['content'],
-        }],
-      });
-      rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
-      usage = response.usage;
+      try {
+        const response = await client.messages.create({
+          model: DEFAULT_ANTHROPIC_MODEL,
+          max_tokens: 512,
+          system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+              { type: 'text', text: `${schemaPrompt}${contextLabel ? `\n\nFilename hint: ${contextLabel}` : ''}` },
+            ] as unknown as Anthropic.MessageParam['content'],
+          }],
+        });
+        rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+        usage = response.usage;
+      } catch (err) {
+        if (!isPdfPageLimitError(err)) throw err;
+
+        const extractedText = ocrText || await extractPdfText(pdfBase64);
+        if (!extractedText) throw err;
+
+        const response = await requestClaudeTextOnly(client, {
+          schemaPrompt,
+          contextLabel,
+          ocrText: extractedText,
+        });
+        rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+        usage = response.usage;
+      }
 
     } else if (hasImage) {
       // Send the image directly — Claude reads it with vision
@@ -383,11 +423,10 @@ export async function suggestDocument(input: {
 
     } else if (hasOcr) {
       // Text from OCR — no file content available
-      const response = await client.messages.create({
-        model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 512,
-        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
-        messages: [{ role: 'user', content: `${schemaPrompt}\n\nDocument text:\n${ocrText!.slice(0, 2000)}` }],
+      const response = await requestClaudeTextOnly(client, {
+        schemaPrompt,
+        contextLabel,
+        ocrText: ocrText!,
       });
       rawText = response.content[0].type === 'text' ? response.content[0].text : '';
       usage = response.usage;
