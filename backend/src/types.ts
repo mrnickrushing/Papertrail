@@ -45,6 +45,8 @@ export type DocumentRecord = {
   id: string;
   title: string;
   category: DocumentCategory;
+  ownerUserId?: string;
+  ownerEmail?: string;
   fileUri?: string;
   thumbnailUri?: string | null;
   mimeType: string;
@@ -71,6 +73,8 @@ export type FolderRecord = {
   id: string;
   name: string;
   color: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
   createdAt: string;
   updatedAt: string;
   syncVersion?: number;

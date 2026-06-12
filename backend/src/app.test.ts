@@ -123,13 +123,32 @@ test('auth login verifies the stored password after reinstall', async () => {
 });
 
 test('sync push and pull stores metadata', async () => {
-  const auth = { Authorization: 'Bearer test-key' };
+  const apiAuth = { Authorization: 'Bearer test-key' };
+  const accountEmail = `sync-${Date.now()}@example.com`;
+  const register = await app.inject({
+    method: 'POST',
+    url: '/v1/auth/register',
+    headers: apiAuth,
+    payload: {
+      id: `user-${Date.now()}`,
+      fullName: 'Sync User',
+      email: accountEmail,
+      passwordHash: createHash('sha256').update('password123').digest('hex'),
+      provider: 'email',
+    },
+  });
+  assert.equal(register.statusCode, 200);
+  const accountAuth = {
+    Authorization: 'Bearer test-key',
+    'X-FileTrail-User-Id': register.json().userId as string,
+    'X-FileTrail-Storage-Token': register.json().storageAccessToken as string,
+  };
   const now = new Date().toISOString();
 
   const push = await app.inject({
     method: 'POST',
     url: '/v1/sync/push',
-    headers: auth,
+    headers: accountAuth,
     payload: {
       deviceId: 'device-1',
       folders: [{ id: 'folder-1', name: 'Tax', color: '#F59E0B', createdAt: now, updatedAt: now }],
@@ -158,7 +177,7 @@ test('sync push and pull stores metadata', async () => {
   const pull = await app.inject({
     method: 'POST',
     url: '/v1/sync/pull',
-    headers: auth,
+    headers: accountAuth,
     payload: { deviceId: 'device-1', sinceVersion: 0 },
   });
 

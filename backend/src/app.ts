@@ -118,18 +118,59 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     integrations: config.integrations,
   }));
 
-  app.post('/v1/sync/pull', async (request) => {
+  function storageKeyMatchesEmail(storageUrl: string | undefined, email: string): boolean {
+    if (!storageUrl) return false;
+    const lower = storageUrl.toLowerCase();
+    const prefix = `r2://`;
+    if (!lower.startsWith(prefix)) return false;
+    const key = lower.slice(lower.indexOf('/', prefix.length) + 1);
+    return key.startsWith(`${email}/`);
+  }
+
+  app.post('/v1/sync/pull', async (request, reply) => {
     const input = parseBody(syncPullSchema, request.body);
+    const user = await authorizeStorageUser(request);
+    if (!user) {
+      return reply.code(401).send({ error: 'Storage access denied' });
+    }
     const result = await store.pull(input.sinceVersion);
+    const userEmail = user.email.toLowerCase();
+    const matchesUser = (record: { ownerUserId?: string; ownerEmail?: string; storageUrl?: string }): boolean => {
+      if (record.ownerUserId && record.ownerUserId === user.id) return true;
+      if (record.ownerEmail && record.ownerEmail.toLowerCase() === userEmail) return true;
+      return storageKeyMatchesEmail(record.storageUrl, userEmail);
+    };
     return {
       ...result,
+      documents: result.documents.filter(matchesUser),
+      folders: result.folders.filter((folder) => (
+        (folder.ownerUserId && folder.ownerUserId === user.id) ||
+        (folder.ownerEmail && folder.ownerEmail.toLowerCase() === userEmail)
+      )),
       serverTime: new Date().toISOString(),
     };
   });
 
-  app.post('/v1/sync/push', async (request) => {
+  app.post('/v1/sync/push', async (request, reply) => {
     const input = parseBody(syncPushSchema, request.body);
-    const result = await store.push(input);
+    const user = await authorizeStorageUser(request);
+    if (!user) {
+      return reply.code(401).send({ error: 'Storage access denied' });
+    }
+    const ownedInput = {
+      ...input,
+      documents: input.documents.map((doc) => ({
+        ...doc,
+        ownerUserId: user.id,
+        ownerEmail: user.email.toLowerCase(),
+      })),
+      folders: input.folders.map((folder) => ({
+        ...folder,
+        ownerUserId: user.id,
+        ownerEmail: user.email.toLowerCase(),
+      })),
+    };
+    const result = await store.push(ownedInput);
     return {
       ok: true,
       syncVersion: result.syncVersion,

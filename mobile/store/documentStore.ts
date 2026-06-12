@@ -615,6 +615,10 @@ export const useDocumentStore = create<DocumentState>()(
           folders: get().folders,
           deletedDocumentIds: get().deletedDocumentIds,
           deletedFolderIds: get().deletedFolderIds,
+          auth: accountProfile?.userId && accountProfile.storageAccessToken ? {
+            userId: accountProfile.userId,
+            storageAccessToken: accountProfile.storageAccessToken,
+          } : undefined,
           mergeDocuments: (incoming) => {
             const mergedDocs = (() => {
               const localById = new Map(get().documents.map((doc) => [doc.id, doc]));

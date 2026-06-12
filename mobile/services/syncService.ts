@@ -90,6 +90,7 @@ export async function syncMetadata(input: {
   folders: Folder[];
   deletedDocumentIds: string[];
   deletedFolderIds: string[];
+  auth?: { userId?: string; storageAccessToken?: string };
   mergeDocuments: (documents: Document[]) => void;
   mergeFolders: (folders: Folder[]) => void;
   applyTombstones: (tombstones: Tombstone[]) => void | Promise<void>;
@@ -121,6 +122,12 @@ export async function syncMetadata(input: {
         deletedDocumentIds: input.deletedDocumentIds,
         deletedFolderIds: input.deletedFolderIds,
       },
+      headers: input.auth?.userId && input.auth.storageAccessToken
+        ? {
+            'X-FileTrail-User-Id': input.auth.userId,
+            'X-FileTrail-Storage-Token': input.auth.storageAccessToken,
+          }
+        : undefined,
     });
 
     // Guard: if the server accepted the request but reports a logical failure, do
@@ -132,6 +139,12 @@ export async function syncMetadata(input: {
     const pull = await apiRequest<SyncPullResponse>('/v1/sync/pull', {
       method: 'POST',
       body: { deviceId, sinceVersion },
+      headers: input.auth?.userId && input.auth.storageAccessToken
+        ? {
+            'X-FileTrail-User-Id': input.auth.userId,
+            'X-FileTrail-Storage-Token': input.auth.storageAccessToken,
+          }
+        : undefined,
     });
 
     // Apply pulled data. All three steps must complete before we clear tombstones.
