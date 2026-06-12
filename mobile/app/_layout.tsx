@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Updates from 'expo-updates';
 import * as SplashScreen from 'expo-splash-screen';
 import { Colors } from '@/theme';
 import { useDocumentStore, useAppStore, useProStore, useDebugStore } from '@/store';
@@ -59,7 +60,46 @@ export default function RootLayout() {
   const logDebug = useDebugStore(s => s.log);
   const setDebugScreenState = useDebugStore(s => s.setScreenState);
   const appStateRef = useRef(AppState.currentState);
+  const isCheckingForUpdatesRef = useRef(false);
+  const lastUpdateCheckAtRef = useRef(0);
   const routeLabel = segments.length > 0 ? `/${segments.join('/')}` : '/';
+
+  const checkForOtaUpdate = React.useCallback(async (reason: 'launch' | 'foreground') => {
+    if (__DEV__ || !Updates.isEnabled || isCheckingForUpdatesRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    const minIntervalMs = reason === 'launch' ? 0 : 60_000;
+    if (now - lastUpdateCheckAtRef.current < minIntervalMs) {
+      return;
+    }
+
+    isCheckingForUpdatesRef.current = true;
+    lastUpdateCheckAtRef.current = now;
+
+    try {
+      logDebug(`ota-check:${reason}:start`);
+      const update = await Updates.checkForUpdateAsync();
+      logDebug(`ota-check:${reason}:${update.isAvailable ? 'available' : 'none'}`);
+      setDebugScreenState('ota', update.isAvailable ? 'available' : 'none');
+
+      if (!update.isAvailable) {
+        return;
+      }
+
+      await Updates.fetchUpdateAsync();
+      logDebug(`ota-check:${reason}:fetched`);
+      setDebugScreenState('ota', 'fetched');
+      await Updates.reloadAsync();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown';
+      logDebug(`ota-check:${reason}:error:${message}`);
+      setDebugScreenState('ota', 'error');
+    } finally {
+      isCheckingForUpdatesRef.current = false;
+    }
+  }, [logDebug, setDebugScreenState]);
 
   // Run once on mount — capture stable refs so the effect doesn't re-run
   const processOCRQueueRef = useRef(processOCRQueue);
@@ -87,8 +127,9 @@ export default function RootLayout() {
     void syncWithBackendRef.current().catch(() => undefined);
     initializePurchases();
     void checkProRef.current(accountEmailRef.current);
+    void checkForOtaUpdate('launch');
     track('app_opened');
-  }, [logDebug, setDebugScreenState]);
+  }, [checkForOtaUpdate, logDebug, setDebugScreenState]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -104,10 +145,13 @@ export default function RootLayout() {
       ) {
         setLocked(true);
       }
+      if (appStateRef.current !== 'active' && next === 'active') {
+        void checkForOtaUpdate('foreground');
+      }
       appStateRef.current = next;
     });
     return () => sub.remove();
-  }, [biometricEnabled, logDebug, setDebugScreenState, setLocked]);
+  }, [biometricEnabled, checkForOtaUpdate, logDebug, setDebugScreenState, setLocked]);
 
   useEffect(() => {
     if (!hasHydrated) return;
