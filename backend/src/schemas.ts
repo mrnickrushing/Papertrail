@@ -21,6 +21,27 @@ export const documentCategorySchema = z.enum([
 ]);
 
 export const ocrStatusSchema = z.enum(['pending', 'processing', 'done', 'failed', 'unavailable']);
+export const documentSourceSchema = z.enum(['camera', 'photo', 'file', 'email']);
+
+export const documentFactsSchema = z.object({
+  personName: z.string().optional(),
+  documentType: z.string().optional(),
+  issuer: z.string().optional(),
+  issueDate: z.string().optional(),
+  expirationDate: z.string().optional(),
+  dueDate: z.string().optional(),
+  policyNumber: z.string().optional(),
+  accountNumber: z.string().optional(),
+  memberNumber: z.string().optional(),
+  amountDue: z.number().nonnegative().optional(),
+  confidence: z.enum(['low', 'medium', 'high']).optional(),
+});
+
+export const emailSourceSchema = z.object({
+  sender: z.string().email(),
+  subject: z.string().optional(),
+  receivedAt: z.string().optional(),
+});
 
 export const documentSchema = z.object({
   id: z.string().min(1),
@@ -36,6 +57,10 @@ export const documentSchema = z.object({
   inferredDate: z.string().optional(),
   amounts: z.array(z.number()).optional(),
   vendor: z.string().optional(),
+  source: documentSourceSchema.optional(),
+  sourceLabel: z.string().optional(),
+  emailSource: emailSourceSchema.optional(),
+  facts: documentFactsSchema.optional(),
   isFavorite: z.boolean(),
   folderId: z.string().nullable(),
   tags: z.array(z.string()),
@@ -93,6 +118,7 @@ export const shareLinkCreateSchema = z.object({
 });
 
 export const emailInboundSchema = z.object({
+  recipient: z.string().email().optional(),
   sender: z.string().email(),
   subject: z.string().default(''),
   attachments: z.array(z.object({

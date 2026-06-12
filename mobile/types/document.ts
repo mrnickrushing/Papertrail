@@ -27,6 +27,27 @@ export type DocumentCategory =
   | 'other';
 
 export type OCRStatus = 'pending' | 'processing' | 'done' | 'failed' | 'unavailable';
+export type DocumentSource = 'camera' | 'photo' | 'file' | 'email';
+
+export interface DocumentFacts {
+  personName?: string;
+  documentType?: string;
+  issuer?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  dueDate?: string;
+  policyNumber?: string;
+  accountNumber?: string;
+  memberNumber?: string;
+  amountDue?: number;
+  confidence?: 'low' | 'medium' | 'high';
+}
+
+export interface EmailSource {
+  sender: string;
+  subject?: string;
+  receivedAt?: string;
+}
 
 export interface Document {
   id: string;
@@ -46,6 +67,10 @@ export interface Document {
   inferredDate?: string;
   amounts?: number[];
   vendor?: string;
+  source?: DocumentSource;
+  sourceLabel?: string;
+  emailSource?: EmailSource;
+  facts?: DocumentFacts;
 
   // Organisation
   isFavorite: boolean;

@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse') as (buffer: Buffer, options?: { max?: number }) => Promise<{ text: string }>;
-import type { DocumentCategory } from './types.js';
+import type { DocumentCategory, DocumentFacts } from './types.js';
 
 const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-haiku-4-5-20251001';
 
@@ -19,35 +19,32 @@ const VALID_CATEGORIES: DocumentCategory[] = [
   'insurance', 'legal', 'vehicle', 'property', 'education', 'travel', 'pet', 'other',
 ];
 
-// ── Compound-word expansions for common document filenames ────────────────────
-// Applied before camelCase / number-letter splitting so the regex patterns
-// that follow can see the individual words with proper boundaries.
 const COMPOUND_SPLITS: [RegExp, string][] = [
-  [/turbotax/gi,         'TurboTax'],
-  [/taxreturn/gi,        'Tax Return'],
-  [/taxform/gi,          'Tax Form'],
-  [/taxdocument/gi,      'Tax Document'],
-  [/paystub/gi,          'Pay Stub'],
-  [/payslip/gi,          'Pay Slip'],
-  [/offerletter/gi,      'Offer Letter'],
-  [/labresult/gi,        'Lab Result'],
-  [/labwork/gi,          'Lab Work'],
-  [/medicalrecord/gi,    'Medical Record'],
-  [/healthrecord/gi,     'Health Record'],
-  [/insurancepolicy/gi,  'Insurance Policy'],
-  [/insuranceclaim/gi,   'Insurance Claim'],
-  [/bankstatement/gi,    'Bank Statement'],
-  [/creditcard/gi,       'Credit Card'],
-  [/propertydeed/gi,     'Property Deed'],
-  [/deedoftrust/gi,      'Deed Of Trust'],
-  [/vehiclereg/gi,       'Vehicle Reg'],
-  [/driverslicense/gi,   'Drivers License'],
-  [/socialsecurity/gi,   'Social Security'],
-  [/birthcert/gi,        'Birth Certificate'],
-  [/deathcert/gi,        'Death Certificate'],
-  [/powerofatt/gi,       'Power Of Attorney'],
-  [/studentloan/gi,      'Student Loan'],
-  [/directdeposit/gi,    'Direct Deposit'],
+  [/turbotax/gi, 'TurboTax'],
+  [/taxreturn/gi, 'Tax Return'],
+  [/taxform/gi, 'Tax Form'],
+  [/taxdocument/gi, 'Tax Document'],
+  [/paystub/gi, 'Pay Stub'],
+  [/payslip/gi, 'Pay Slip'],
+  [/offerletter/gi, 'Offer Letter'],
+  [/labresult/gi, 'Lab Result'],
+  [/labwork/gi, 'Lab Work'],
+  [/medicalrecord/gi, 'Medical Record'],
+  [/healthrecord/gi, 'Health Record'],
+  [/insurancepolicy/gi, 'Insurance Policy'],
+  [/insuranceclaim/gi, 'Insurance Claim'],
+  [/bankstatement/gi, 'Bank Statement'],
+  [/creditcard/gi, 'Credit Card'],
+  [/propertydeed/gi, 'Property Deed'],
+  [/deedoftrust/gi, 'Deed Of Trust'],
+  [/vehiclereg/gi, 'Vehicle Reg'],
+  [/driverslicense/gi, 'Drivers License'],
+  [/socialsecurity/gi, 'Social Security'],
+  [/birthcert/gi, 'Birth Certificate'],
+  [/deathcert/gi, 'Death Certificate'],
+  [/powerofatt/gi, 'Power Of Attorney'],
+  [/studentloan/gi, 'Student Loan'],
+  [/directdeposit/gi, 'Direct Deposit'],
 ];
 
 const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
@@ -62,7 +59,7 @@ const CATEGORY_KEYWORDS: Array<[DocumentCategory, RegExp]> = [
   ['property', /\b(property deed|deed of trust|mortgage (?:agreement|application|approval)|lease agreement|rental agreement|landlord|tenant|closing disclosure|title insurance|homeowners association|\bhoa\b|escrow (?:account|statement)|home inspection|real estate (?:purchase|closing)|security deposit)\b/i],
   ['receipt', /\b(receipt|subtotal|total|paid|visa|mastercard|store)\b/i],
   ['contract', /\b(contract|agreement|signature|party|terms)\b/i],
-  ['id', /\b(driver|license|passport|identification|dob)\b/i],
+  ['id', /\b(driver|license|passport|identification|dob|birth certificate|certificate of live birth|social security)\b/i],
   ['warranty', /\b(warranty|serial|coverage|expires)\b/i],
   ['medical', /\b(patient|medical|clinic|hospital|diagnosis|rx|emergency|urgent care|panel|specimen|lab(?:oratory)?|glucose|cholesterol|triglycerides?|hdl|ldl|hemoglobin|a1c|metabolic|lipid|blood (?:work|test|count)|reference range|physician|provider|doctor|prescri\w*)\b|\bE\.?R\.?\b/i],
   ['work', /\b(pay ?stub|payslip|earnings statement|employee|employer|employment (?:agreement|contract|offer|verification)|offer letter|performance review|onboarding|timesheet|direct deposit|human resources|\bhr\b|job offer|termination letter|resignation letter|w-?4|i-9)\b/i],
@@ -89,6 +86,15 @@ const CATEGORY_FOLDER: Record<DocumentCategory, string> = {
   other: 'Other Documents',
 };
 
+const PERSON_SUBFOLDER_CATEGORIES = new Set<DocumentCategory>([
+  'id',
+  'medical',
+  'education',
+  'travel',
+  'insurance',
+  'legal',
+]);
+
 const SUPPORTED_IMAGE_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
 ]);
@@ -103,6 +109,7 @@ type SuggestResult = {
   date?: string;
   vendor?: string;
   amounts?: number[];
+  facts?: DocumentFacts;
   source: 'heuristic' | 'claude';
   usage?: { inputTokens: number; outputTokens: number; costUsd: number };
 };
@@ -129,7 +136,6 @@ function normalizeFilename(filename: string): string {
   const noExt = filename.replace(/\.[a-z0-9]+$/i, '');
   if (isUuidLike(noExt)) return '';
 
-  // Expand known compound document words first so word-boundary splitting works
   let expanded = noExt;
   for (const [pattern, replacement] of COMPOUND_SPLITS) {
     expanded = expanded.replace(pattern, replacement);
@@ -137,9 +143,9 @@ function normalizeFilename(filename: string): string {
 
   const spaced = expanded
     .replace(/[_-]+/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')        // camelCase → camel Case
-    .replace(/([0-9]+)([a-zA-Z])/g, '$1 $2')     // 2017turbo → 2017 turbo
-    .replace(/([a-zA-Z])([0-9]+)/g, '$1 $2')     // return1040 → return 1040
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([0-9]+)([a-zA-Z])/g, '$1 $2')
+    .replace(/([a-zA-Z])([0-9]+)/g, '$1 $2')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
@@ -148,6 +154,203 @@ function normalizeFilename(filename: string): string {
     .map(w => w === w.toUpperCase() && w.length > 1 ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
   return titleCased.slice(0, 60);
+}
+
+function titleCaseWord(word: string): string {
+  if (!word) return word;
+  if (/^(II|III|IV|VI|VII|VIII|IX|X)$/.test(word)) return word;
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function normalizeFactValue(raw: string | undefined, max = 100): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  return cleaned ? cleaned.slice(0, max) : undefined;
+}
+
+function firstMatch(text: string, pattern: RegExp): string | undefined {
+  const match = text.match(pattern);
+  return normalizeFactValue(match?.[1]);
+}
+
+function normalizeIsoDate(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const slash = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const month = slash[1].padStart(2, '0');
+    const day = slash[2].padStart(2, '0');
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+    return `${year}-${month}-${day}`;
+  }
+  return undefined;
+}
+
+function scoreFacts(facts: DocumentFacts): DocumentFacts['confidence'] {
+  const populated = Object.values(facts).filter(Boolean).length;
+  if (populated >= 6) return 'high';
+  if (populated >= 3) return 'medium';
+  return 'low';
+}
+
+function extractFacts(input: {
+  title?: string;
+  filename?: string;
+  ocrText?: string;
+  category: DocumentCategory;
+  vendor?: string;
+  amounts?: number[];
+  date?: string;
+  personName?: string;
+}): DocumentFacts | undefined {
+  const text = `${input.title ?? ''}\n${input.filename ?? ''}\n${input.ocrText ?? ''}`;
+  const normalizedText = text.replace(/\r/g, '');
+  const personName = input.personName ? normalizePersonName(input.personName) : undefined;
+  const issueDate = normalizeIsoDate(
+    input.date
+      || firstMatch(normalizedText, /\b(?:date of birth|dob)\b[:\s-]*([0-9/.-]{6,12})/i)
+      || firstMatch(normalizedText, /\b(?:issue(?:d)? date|date issued|issued on)\b[:\s-]*([0-9/.-]{6,12})/i)
+      || firstMatch(normalizedText, /\bdate\b[:\s-]*([0-9/.-]{6,12})/i),
+  );
+  const expirationDate = normalizeIsoDate(
+    firstMatch(normalizedText, /\b(?:expir(?:ation|es|y) date|expires?|valid thru|valid until)\b[:\s-]*([0-9/.-]{6,12})/i),
+  );
+  const dueDate = normalizeIsoDate(
+    firstMatch(normalizedText, /\b(?:payment due|due date|pay by)\b[:\s-]*([0-9/.-]{6,12})/i),
+  );
+  const policyNumber = firstMatch(normalizedText, /\bpolicy(?: number| no\.?)?\b[:\s#-]*([A-Z0-9-]{4,})/i);
+  const accountNumber = firstMatch(normalizedText, /\baccount(?: number| no\.?)?\b[:\s#-]*([A-Z0-9-]{4,})/i);
+  const memberNumber = firstMatch(normalizedText, /\bmember(?: number| id| no\.?)?\b[:\s#-]*([A-Z0-9-]{4,})/i);
+  const issuer = normalizeFactValue(
+    input.vendor
+    || firstMatch(normalizedText, /\b(?:issued by|issuer|provider|hospital|clinic|agency|department)\b[:\s-]*([A-Za-z0-9&.,' -]{3,})/i),
+  );
+  const documentType = normalizeFactValue(
+    firstMatch(normalizedText, /\b(birth certificate|driver(?:'s)? license|passport|insurance card|insurance policy|medical record|lab result|bill|invoice|statement|school transcript|report card)\b/i)
+    || `${input.category.charAt(0).toUpperCase()}${input.category.slice(1)} document`,
+    60,
+  );
+  const amountDue = typeof input.amounts?.[0] === 'number'
+    ? input.amounts[0]
+    : undefined;
+
+  const facts: DocumentFacts = {
+    ...(personName ? { personName } : {}),
+    ...(documentType ? { documentType } : {}),
+    ...(issuer ? { issuer } : {}),
+    ...(issueDate ? { issueDate } : {}),
+    ...(expirationDate ? { expirationDate } : {}),
+    ...(dueDate ? { dueDate } : {}),
+    ...(policyNumber ? { policyNumber } : {}),
+    ...(accountNumber ? { accountNumber } : {}),
+    ...(memberNumber ? { memberNumber } : {}),
+    ...(typeof amountDue === 'number' ? { amountDue } : {}),
+  };
+
+  if (Object.keys(facts).length === 0) return undefined;
+  return { ...facts, confidence: scoreFacts(facts) };
+}
+
+function normalizePersonName(raw: string): string {
+  const cleaned = raw
+    .replace(/\s+/g, ' ')
+    .replace(/^[^A-Za-z]+|[^A-Za-z'. -]+$/g, '')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned
+    .split(' ')
+    .filter(Boolean)
+    .map((part) =>
+      part
+        .split(/([-'’])/)
+        .map((segment) => (/^[-'’]$/.test(segment) ? segment : titleCaseWord(segment)))
+        .join(''),
+    )
+    .join(' ')
+    .slice(0, 80);
+}
+
+function isLikelyPersonName(raw: string): boolean {
+  const value = normalizePersonName(raw);
+  if (!value) return false;
+  if (/\d/.test(value)) return false;
+  const parts = value.split(' ').filter(Boolean);
+  if (parts.length < 2 || parts.length > 4) return false;
+  const lower = value.toLowerCase();
+  if (/\b(birth certificate|certificate|department|registrar|medical|hospital|clinic|license|passport|identification|social security|statement|insurance|county|state|city|country|sex|mother|father|child|name|issued|signature|address|street)\b/.test(lower)) {
+    return false;
+  }
+  return parts.every((part) => /^[A-Za-z][A-Za-z'’.-]*$/.test(part));
+}
+
+function titleContainsPersonName(title: string, personName: string): boolean {
+  const normalizedTitle = title.toLowerCase();
+  const normalizedName = personName.toLowerCase();
+  if (!normalizedTitle || !normalizedName) return false;
+  return normalizedTitle.includes(normalizedName);
+}
+
+function enrichTitleWithPersonName(title: string, category: DocumentCategory, personName?: string): string {
+  if (!personName || !PERSON_SUBFOLDER_CATEGORIES.has(category)) return title;
+  const cleanTitle = title.trim();
+  const cleanName = normalizePersonName(personName);
+  if (!cleanTitle || !cleanName) return title;
+  if (titleContainsPersonName(cleanTitle, cleanName)) return cleanTitle;
+  if (cleanTitle.toLowerCase().includes(cleanName.split(' ')[0].toLowerCase()) && cleanTitle.length > 18) {
+    return cleanTitle;
+  }
+  return `${cleanTitle} - ${cleanName}`.slice(0, 120);
+}
+
+function extractPersonSubfolderName(input: {
+  title?: string;
+  ocrText?: string;
+  category: DocumentCategory;
+}): string | undefined {
+  if (!PERSON_SUBFOLDER_CATEGORIES.has(input.category)) return undefined;
+
+  const text = `${input.title ?? ''}\n${input.ocrText ?? ''}`;
+  const lines = text
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const inlineLabelPatterns = [
+    /(?:patient name|name of child|child(?:'s)? name|full name|student name|member name|insured name|employee name|traveler name|passenger name|name)[ \t]*[:\-]?[ \t]*([A-Za-z][A-Za-z'’.-]+(?:[ \t]+[A-Za-z][A-Za-z'’.-]+){1,3})/i,
+  ];
+  for (const pattern of inlineLabelPatterns) {
+    const match = text.match(pattern);
+    if (match?.[1] && isLikelyPersonName(match[1])) {
+      return normalizePersonName(match[1]);
+    }
+  }
+
+  const labelOnlyPatterns = [
+    /^(?:patient name|name of child|child(?:'s)? name|full name|student name|member name|insured name|employee name|traveler name|passenger name|name)$/i,
+    /^(?:patient|student|member|insured|employee|traveler|passenger|child)$/i,
+  ];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!labelOnlyPatterns.some((pattern) => pattern.test(lines[index]))) continue;
+    const next = lines[index + 1];
+    if (next && isLikelyPersonName(next)) {
+      return normalizePersonName(next);
+    }
+  }
+
+  const titleNamePatterns = [
+    /([A-Za-z][A-Za-z'’.-]+(?:\s+[A-Za-z][A-Za-z'’.-]+){1,3})\s+(?:birth certificate|passport|driver(?:'s)? license|social security card)/i,
+    /(?:birth certificate|passport|driver(?:'s)? license|social security card)\s+for\s+([A-Za-z][A-Za-z'’.-]+(?:\s+[A-Za-z][A-Za-z'’.-]+){1,3})/i,
+  ];
+  for (const pattern of titleNamePatterns) {
+    const match = (input.title ?? '').match(pattern);
+    if (match?.[1] && isLikelyPersonName(match[1])) {
+      return normalizePersonName(match[1]);
+    }
+  }
+
+  const plausibleLine = lines.find((line) => isLikelyPersonName(line));
+  return plausibleLine ? normalizePersonName(plausibleLine) : undefined;
 }
 
 function extractJsonObject(raw: string): string {
@@ -161,40 +364,32 @@ function extractJsonObject(raw: string): string {
   return trimmed;
 }
 
-// Compound-filename patterns applied WITHOUT \b so they match inside concatenated
-// words like "2017turbotaxreturn" or "labresultsjune2024". These run as a
-// second-pass fallback when the main \b-based regex finds nothing.
-const FILENAME_COMPOUND_PATTERNS: Array<[DocumentCategory, RegExp]> = [
-  ['tax',        /turbotax|taxreturn|federaltax|statetax|form1040|irs1040|taxdoc|1040ez|1040a|scheduleA|scheduleB|scheduleC|scheduleD/i],
-  ['work',       /paystub|payslip|offerletter|w4form|i9form|directdeposit|employmentverif/i],
-  ['medical',    /labresult|labwork|testresult|medicalrecord|healthrecord|patientrecord/i],
-  ['insurance',  /insurancepolicy|policycard|insuranceclaim|premiumstatement/i],
-  ['retirement', /401k|403b|rothira|retirementplan|pensionstatement/i],
-  ['legal',      /divorcedecree|divorcepapers|courtorder|powerofatt/i],
-  ['vehicle',    /vehiclereg|vehicletitle|dmvform|cartitle/i],
-  ['property',   /propertydeed|deedoftrust|mortgagestatement|hoastatement/i],
-  ['education',  /studentloan|tuitionstatement/i],
-];
-
 function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: string; mimeType?: string }): SuggestResult {
   const filename = input.filename ? normalizeFilename(input.filename) : '';
   const rawTitle = input.title?.trim() ?? '';
   const cleanTitle = (isUuidLike(rawTitle.replace(/\.[a-z0-9]+$/i, '')) || isFallbackTitle(rawTitle)) ? '' : rawTitle;
-  // Normalize the cleaned title the same way we normalize filenames so that
-  // "2017turbotaxreturn" becomes "2017 Turbo Tax Return" for regex matching.
   const normalizedCleanTitle = cleanTitle ? normalizeFilename(cleanTitle) : '';
   const title = normalizedCleanTitle || filename;
 
   const text = `${title}\n${input.ocrText ?? ''}`;
-  let category: DocumentCategory = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'other';
+  let category = CATEGORY_KEYWORDS.find(([, pattern]) => pattern.test(text))?.[0] ?? 'other';
 
-  // Second pass: strip all separators from the raw filename and test compound
-  // patterns without word boundaries — catches "2017turbotaxreturn" etc.
   if (category === 'other') {
     const rawFileLower = (input.filename ?? input.title ?? '').toLowerCase()
       .replace(/\.[a-z0-9]+$/i, '')
       .replace(/[\s._-]+/g, '');
-    category = FILENAME_COMPOUND_PATTERNS.find(([, p]) => p.test(rawFileLower))?.[0] ?? 'other';
+    const fallbackPatterns: Array<[DocumentCategory, RegExp]> = [
+      ['tax', /turbotax|taxreturn|federaltax|statetax|form1040|irs1040|taxdoc|1040ez|1040a|schedulea|scheduleb|schedulec|scheduled/i],
+      ['work', /paystub|payslip|offerletter|w4form|i9form|directdeposit|employmentverif/i],
+      ['medical', /labresult|labwork|testresult|medicalrecord|healthrecord|patientrecord/i],
+      ['insurance', /insurancepolicy|policycard|insuranceclaim|premiumstatement/i],
+      ['retirement', /401k|403b|rothira|retirementplan|pensionstatement/i],
+      ['legal', /divorcedecree|divorcepapers|courtorder|powerofatt/i],
+      ['vehicle', /vehiclereg|vehicletitle|dmvform|cartitle/i],
+      ['property', /propertydeed|deedoftrust|mortgagestatement|hoastatement/i],
+      ['education', /studentloan|tuitionstatement/i],
+    ];
+    category = fallbackPatterns.find(([, pattern]) => pattern.test(rawFileLower))?.[0] ?? 'other';
   }
 
   const firstOcrLine = input.ocrText
@@ -218,8 +413,7 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
   if (/\b(invoice|bill)\b/i.test(text)) tags.push('invoice');
   if (/\b(statement)\b/i.test(text)) tags.push('statement');
   if (/\b(renewal|renew)\b/i.test(text)) tags.push('renewal');
-
-  // Category-specific tag enrichment from filename/title signals
+  if (input.mimeType?.includes('pdf')) tags.push('pdf');
   const searchText = `${input.filename ?? ''} ${input.title ?? ''} ${input.ocrText ?? ''}`;
   if (category === 'tax') {
     const yearMatch = searchText.match(/\b(20\d{2}|19\d{2})\b/);
@@ -248,14 +442,33 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
     if (/home|property/i.test(searchText)) tags.push('home');
     if (/life/i.test(searchText)) tags.push('life');
   }
-
   if (tags.length === 0) tags.push('review');
 
-  return {
-    suggestedTitle: baseTitle.slice(0, 120),
-    suggestedFolderName: CATEGORY_FOLDER[category],
+  const suggestedSubfolderName = extractPersonSubfolderName({
+    title: title || input.filename,
+    ocrText: input.ocrText,
     category,
-    tags: tags.slice(0, 5),
+  });
+  const suggestedTitle = enrichTitleWithPersonName(
+    baseTitle.slice(0, 120),
+    category,
+    suggestedSubfolderName,
+  );
+  const facts = extractFacts({
+    title: suggestedTitle,
+    filename: input.filename,
+    ocrText: input.ocrText,
+    category,
+    personName: suggestedSubfolderName,
+  });
+
+  return {
+    suggestedTitle,
+    suggestedFolderName: CATEGORY_FOLDER[category],
+    ...(suggestedSubfolderName ? { suggestedSubfolderName } : {}),
+    category,
+    tags: Array.from(new Set(tags)).slice(0, 5),
+    ...(facts ? { facts } : {}),
     source: 'heuristic',
   };
 }
@@ -264,11 +477,16 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
 async function extractPdfText(base64: string): Promise<string> {
   try {
     const buffer = Buffer.from(base64, 'base64');
-    const result = await pdfParse(buffer, { max: 15 });
+    const result = await pdfParse(buffer, { max: 10 });
     return result.text?.trim() ?? '';
   } catch {
     return '';
   }
+}
+
+function isPdfPageLimitError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /maximum of 100 PDF pages/i.test(message);
 }
 
 async function requestClaudeTextOnly(client: Anthropic, input: {
@@ -281,6 +499,7 @@ async function requestClaudeTextOnly(client: Anthropic, input: {
     input.contextLabel ? `\n\nFilename hint: ${input.contextLabel}` : '',
     `\n\nDocument text:\n${input.ocrText.slice(0, 12000)}`,
   ].join('');
+
   return client.messages.create({
     model: DEFAULT_ANTHROPIC_MODEL,
     max_tokens: 512,
@@ -311,7 +530,19 @@ function buildSchemaPrompt(existingFolders?: string[]): string {
 - "vendor": merchant, organization, or issuing party name, or omit if not applicable
 - "amounts": array of numeric monetary values (no currency symbols, e.g. [142.50, 9.99]), or omit if none
 - "folderName": the folder to file this in — use the standard name for the category (e.g. "Receipts", "Contracts", "Tax Documents", "Medical Records") but use a more specific name when clearly appropriate (e.g. "Court Documents" for legal filings, "Insurance" for insurance docs); keep it short.${folderGuidance}
-- "subfolderName": for medical documents, the patient's full name as it appears on the document, for use as a subfolder name; omit if not a medical document or if no patient name is found`;
+- "subfolderName": for documents that are clearly about a specific person (especially medical records, IDs, passports, birth certificates, school records, or similar personal records), return that person's full name exactly as it appears on the document for use as a subfolder name; omit if no clear person name is found. Prefer the subject of the document, not the issuing agency, provider, parent, witness, or clerk. Examples: for a birth certificate use the child's name, for a driver's license use the cardholder's name, for a lab result use the patient's name.
+- "facts": optional object containing any extracted structured fields that clearly appear on the document:
+  - "personName"
+  - "documentType"
+  - "issuer"
+  - "issueDate" (YYYY-MM-DD)
+  - "expirationDate" (YYYY-MM-DD)
+  - "dueDate" (YYYY-MM-DD)
+  - "policyNumber"
+  - "accountNumber"
+  - "memberNumber"
+  - "amountDue" (number only)
+  - "confidence": one of low, medium, high`;
 }
 
 export async function suggestDocument(input: {
@@ -359,9 +590,7 @@ export async function suggestDocument(input: {
 
     if (hasPdf) {
       const pdfBase64 = input.pdfBase64!;
-      // Try sending the PDF natively — Claude reads it without text extraction.
-      // If Claude rejects it (>100 pages, encrypted, malformed), fall back to
-      // extracting text with pdf-parse and sending that instead.
+      // Send the PDF directly — Claude reads it natively without text extraction
       try {
         const response = await client.messages.create({
           model: DEFAULT_ANTHROPIC_MODEL,
@@ -377,11 +606,17 @@ export async function suggestDocument(input: {
         });
         rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
         usage = response.usage;
-      } catch (pdfErr) {
-        // Attempt text extraction; re-throw if we have nothing to send to Claude.
+      } catch (err) {
+        if (!isPdfPageLimitError(err)) throw err;
+
         const extractedText = ocrText || await extractPdfText(pdfBase64);
-        if (!extractedText) throw pdfErr;
-        const response = await requestClaudeTextOnly(client, { schemaPrompt, contextLabel, ocrText: extractedText });
+        if (!extractedText) throw err;
+
+        const response = await requestClaudeTextOnly(client, {
+          schemaPrompt,
+          contextLabel,
+          ocrText: extractedText,
+        });
         rawText = response.content[0]?.type === 'text' ? response.content[0].text : '';
         usage = response.usage;
       }
@@ -411,11 +646,10 @@ export async function suggestDocument(input: {
 
     } else if (hasOcr) {
       // Text from OCR — no file content available
-      const response = await client.messages.create({
-        model: DEFAULT_ANTHROPIC_MODEL,
-        max_tokens: 512,
-        system: 'You are a document classification assistant. Always respond with valid JSON only, no markdown.',
-        messages: [{ role: 'user', content: `${schemaPrompt}\n\nDocument text:\n${ocrText!.slice(0, 2000)}` }],
+      const response = await requestClaudeTextOnly(client, {
+        schemaPrompt,
+        contextLabel,
+        ocrText: ocrText!,
       });
       rawText = response.content[0].type === 'text' ? response.content[0].text : '';
       usage = response.usage;
@@ -461,9 +695,19 @@ export async function suggestDocument(input: {
     const suggestedFolderName: string = typeof parsed.folderName === 'string' && parsed.folderName.trim()
       ? parsed.folderName.trim().slice(0, 80)
       : CATEGORY_FOLDER[category];
+    const heuristicSubfolderName = extractPersonSubfolderName({
+      title: suggestedTitle,
+      ocrText: input.ocrText?.trim(),
+      category,
+    });
     const suggestedSubfolderName: string | undefined = typeof parsed.subfolderName === 'string' && parsed.subfolderName.trim()
       ? parsed.subfolderName.trim().slice(0, 80)
-      : undefined;
+      : heuristicSubfolderName;
+    const suggestedTitleWithPerson = enrichTitleWithPersonName(
+      suggestedTitle,
+      category,
+      suggestedSubfolderName,
+    );
 
     const usageResult = usage
       ? {
@@ -473,7 +717,48 @@ export async function suggestDocument(input: {
         }
       : undefined;
 
-    return { suggestedTitle, suggestedFolderName, suggestedSubfolderName, category, tags, notes, date, vendor, amounts, source: 'claude', usage: usageResult };
+    const parsedFacts = typeof parsed.facts === 'object' && parsed.facts !== null ? parsed.facts as Record<string, unknown> : {};
+    const inferredFacts = extractFacts({
+      title: suggestedTitleWithPerson,
+      filename: input.filename,
+      ocrText: input.ocrText?.trim(),
+      category,
+      vendor,
+      amounts,
+      date,
+      personName: suggestedSubfolderName,
+    });
+    const facts: DocumentFacts | undefined = {
+      ...(typeof parsedFacts.personName === 'string' ? { personName: normalizePersonName(parsedFacts.personName) } : {}),
+      ...(typeof parsedFacts.documentType === 'string' ? { documentType: parsedFacts.documentType.trim().slice(0, 60) } : {}),
+      ...(typeof parsedFacts.issuer === 'string' ? { issuer: parsedFacts.issuer.trim().slice(0, 100) } : {}),
+      ...(typeof parsedFacts.issueDate === 'string' && normalizeIsoDate(parsedFacts.issueDate) ? { issueDate: normalizeIsoDate(parsedFacts.issueDate) } : {}),
+      ...(typeof parsedFacts.expirationDate === 'string' && normalizeIsoDate(parsedFacts.expirationDate) ? { expirationDate: normalizeIsoDate(parsedFacts.expirationDate) } : {}),
+      ...(typeof parsedFacts.dueDate === 'string' && normalizeIsoDate(parsedFacts.dueDate) ? { dueDate: normalizeIsoDate(parsedFacts.dueDate) } : {}),
+      ...(typeof parsedFacts.policyNumber === 'string' ? { policyNumber: parsedFacts.policyNumber.trim().slice(0, 40) } : {}),
+      ...(typeof parsedFacts.accountNumber === 'string' ? { accountNumber: parsedFacts.accountNumber.trim().slice(0, 40) } : {}),
+      ...(typeof parsedFacts.memberNumber === 'string' ? { memberNumber: parsedFacts.memberNumber.trim().slice(0, 40) } : {}),
+      ...(typeof parsedFacts.amountDue === 'number' && Number.isFinite(parsedFacts.amountDue) ? { amountDue: parsedFacts.amountDue } : {}),
+      ...(parsedFacts.confidence === 'low' || parsedFacts.confidence === 'medium' || parsedFacts.confidence === 'high'
+        ? { confidence: parsedFacts.confidence }
+        : {}),
+      ...inferredFacts,
+    };
+
+    return {
+      suggestedTitle: suggestedTitleWithPerson,
+      suggestedFolderName,
+      suggestedSubfolderName,
+      category,
+      tags,
+      notes,
+      date,
+      vendor,
+      amounts,
+      ...(Object.keys(facts).length > 0 ? { facts: { ...facts, confidence: facts.confidence ?? scoreFacts(facts) } } : {}),
+      source: 'claude',
+      usage: usageResult,
+    };
   } catch (err) {
     console.error('[ai.suggestDocument] Claude call failed, falling back to heuristics:', err instanceof Error ? err.message : err);
     return heuristicSuggest({ ...input, ocrText: input.ocrText?.trim() });

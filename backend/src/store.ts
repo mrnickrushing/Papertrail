@@ -162,6 +162,13 @@ export class JsonStore implements FiletrailStore {
     });
   }
 
+  async listInboundEmails(limit = 100): Promise<EmailInboundRecord[]> {
+    const data = await this.read();
+    return Object.values(data.inboundEmails)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+      .slice(0, limit);
+  }
+
   async getAnalytics(limit = 500): Promise<AnalyticsRecord[]> {
     const data = await this.read();
     return data.analytics.slice(-limit).reverse();

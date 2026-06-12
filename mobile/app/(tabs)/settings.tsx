@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDocumentStore, useAppStore, useProStore } from '@/store';
 import { TourBubble } from '@/components/TourBubble';
 import { useTourTip } from '@/hooks/useTourTip';
@@ -68,6 +69,12 @@ export default function SettingsScreen() {
           value={docsLabel}
           icon="hard-drive"
           onPress={() => router.push('/settings/storage')}
+        />
+        <SettingsNavRow
+          label="Email to Vault"
+          value="Forward documents into Autopilot"
+          icon="mail"
+          onPress={() => router.push('/settings/email')}
         />
         <SettingsNavRow
           label="Security"

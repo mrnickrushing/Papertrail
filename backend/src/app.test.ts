@@ -21,6 +21,7 @@ const config: RuntimeConfig = {
   dataDir: '',
   databaseUrl: null,
   publicAppUrl: 'http://localhost:4000',
+  inboundEmailDomain: 'mail.filetrail.test',
   integrations: {
     supabase: false,
     r2: false,
@@ -173,6 +174,8 @@ test('AI suggestion endpoint extracts a person subfolder for birth certificates'
   assert.equal(res.json().suggestedFolderName, 'IDs');
   assert.equal(res.json().suggestedSubfolderName, 'Jacob Eli Rushing');
   assert.equal(res.json().suggestedTitle, 'Birth Certificate - Jacob Eli Rushing');
+  assert.equal(res.json().facts.personName, 'Jacob Eli Rushing');
+  assert.equal(res.json().facts.issueDate, '2024-02-10');
 });
 
 test('AI suggestion endpoint handles lowercase person names in OCR text', async () => {
@@ -191,6 +194,42 @@ test('AI suggestion endpoint handles lowercase person names in OCR text', async 
   assert.equal(res.json().category, 'id');
   assert.equal(res.json().suggestedSubfolderName, 'Nick A Rushing');
   assert.equal(res.json().suggestedTitle, 'Driver License - Nick A Rushing');
+  assert.equal(res.json().facts.personName, 'Nick A Rushing');
+});
+
+test('email config endpoint returns forwarding alias', async () => {
+  const res = await app.inject({
+    method: 'GET',
+    url: '/v1/email/config?email=nick@example.com',
+    headers: { Authorization: 'Bearer test-key' },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().forwardingAddress, 'filetrail+nick.example.com@mail.filetrail.test');
+  assert.equal(res.json().inboundEnabled, true);
+});
+
+test('email inbound records can be listed', async () => {
+  const auth = { Authorization: 'Bearer test-key' };
+  const inbound = await app.inject({
+    method: 'POST',
+    url: '/v1/email/inbound',
+    headers: auth,
+    payload: {
+      sender: 'billing@example.com',
+      subject: 'June statement',
+      attachments: [{ filename: 'statement.pdf', mimeType: 'application/pdf', sizeBytes: 1200 }],
+    },
+  });
+  assert.equal(inbound.statusCode, 200);
+
+  const list = await app.inject({
+    method: 'GET',
+    url: '/v1/email/inbound?limit=5',
+    headers: auth,
+  });
+  assert.equal(list.statusCode, 200);
+  assert.ok(list.json().emails.length >= 1);
 });
 
 test('share links enforce passwords and list created links', async () => {

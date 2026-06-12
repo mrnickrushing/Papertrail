@@ -10,6 +10,7 @@ export type RuntimeConfig = {
   dataDir: string;
   databaseUrl: string | null;
   publicAppUrl: string;
+  inboundEmailDomain: string | null;
   integrations: {
     supabase: boolean;
     r2: boolean;
@@ -36,6 +37,7 @@ export function loadConfig(): RuntimeConfig {
     dataDir: process.env.DATA_DIR || '.data',
     databaseUrl: process.env.DATABASE_URL?.trim() || null,
     publicAppUrl: process.env.PUBLIC_APP_URL || 'http://localhost:4000',
+    inboundEmailDomain: process.env.INBOUND_EMAIL_DOMAIN?.trim() || null,
     integrations: {
       supabase: boolFromEnv('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'),
       r2: boolFromEnv(
