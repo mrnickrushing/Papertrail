@@ -127,6 +127,45 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     return key.startsWith(`${email}/`);
   }
 
+  async function attachStorageUrlsForUser(
+    user: { id: string; email: string; fullName: string },
+    documents: Array<{
+      id: string;
+      title: string;
+      category: string;
+      mimeType: string;
+      storageUrl?: string;
+      ownerUserId?: string;
+      ownerEmail?: string;
+    }>,
+  ): Promise<typeof documents> {
+    if (!r2Client || !r2Config) return documents;
+    const email = user.email.toLowerCase();
+    const fullName = user.fullName;
+
+    return Promise.all(documents.map(async (doc) => {
+      if (doc.storageUrl) return doc;
+
+      const candidateKey = documentKey(
+        doc.id,
+        doc.mimeType,
+        doc.title,
+        email,
+        doc.category,
+        fullName,
+      );
+
+      if (await objectExists(r2Client, r2Config.bucket, candidateKey)) {
+        return {
+          ...doc,
+          storageUrl: `r2://${r2Config.bucket}/${candidateKey}`,
+        };
+      }
+
+      return doc;
+    }));
+  }
+
   app.post('/v1/sync/pull', async (request, reply) => {
     const input = parseBody(syncPullSchema, request.body);
     const user = await authorizeStorageUser(request);
@@ -135,6 +174,7 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     }
     const result = await store.pull(input.sinceVersion);
     const userEmail = user.email.toLowerCase();
+    const hydratedDocuments = await attachStorageUrlsForUser(user, result.documents);
     const matchesUser = (record: { ownerUserId?: string; ownerEmail?: string; storageUrl?: string }): boolean => {
       if (record.ownerUserId && record.ownerUserId === user.id) return true;
       if (record.ownerEmail && record.ownerEmail.toLowerCase() === userEmail) return true;
@@ -142,7 +182,7 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     };
     return {
       ...result,
-      documents: result.documents.filter(matchesUser),
+      documents: hydratedDocuments.filter(matchesUser),
       folders: result.folders.filter((folder) => (
         (folder.ownerUserId && folder.ownerUserId === user.id) ||
         (folder.ownerEmail && folder.ownerEmail.toLowerCase() === userEmail)
