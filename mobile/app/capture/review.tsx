@@ -39,7 +39,7 @@ import { extractText, isOCRAvailable } from '@/services/ocr';
 import { isPDFLike, getPDFInfo } from '@/services/pdfService';
 import { apiRequest, isBackendConfigured, getAnthropicApiKey } from '@/services/api';
 import { C, T, R, S } from '@/theme/tokens';
-import type { DocumentCategory } from '@/types/document';
+import type { DocumentCategory, DocumentFacts } from '@/types/document';
 
 const CATEGORIES: DocumentCategory[] = [
   'receipt', 'bill', 'contract', 'id', 'warranty', 'medical', 'tax', 'work', 'retirement',
@@ -160,6 +160,7 @@ export default function DocumentReviewScreen() {
   const [suggestedDate, setSuggestedDate] = useState<string>('');
   const [suggestedVendor, setSuggestedVendor] = useState<string>('');
   const [suggestedAmounts, setSuggestedAmounts] = useState<number[]>([]);
+  const [suggestedFacts, setSuggestedFacts] = useState<DocumentFacts | undefined>();
   const [ocrText, setOCRText] = useState<string | null>(null);
   const [ocrStatus, setOCRStatus] = useState<'idle' | 'processing' | 'done' | 'unavailable'>('idle');
   const [aiStatus, setAiStatus] = useState<'idle' | 'processing' | 'done'>('idle');
@@ -218,6 +219,7 @@ export default function DocumentReviewScreen() {
           date?: string;
           vendor?: string;
           amounts?: number[];
+          facts?: DocumentFacts;
           usage?: { inputTokens: number; outputTokens: number; costUsd: number };
         }>('/v1/ai/suggest-document', {
           method: 'POST',
@@ -235,6 +237,7 @@ export default function DocumentReviewScreen() {
             if (suggestion.date) setSuggestedDate(suggestion.date);
             if (suggestion.vendor) setSuggestedVendor(suggestion.vendor);
             if (Array.isArray(suggestion.amounts)) setSuggestedAmounts(suggestion.amounts);
+            if (suggestion.facts) setSuggestedFacts(suggestion.facts);
             if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
             setAiStatus('done');
           })
@@ -261,6 +264,7 @@ export default function DocumentReviewScreen() {
       date?: string;
       vendor?: string;
       amounts?: number[];
+      facts?: DocumentFacts;
       usage?: { inputTokens: number; outputTokens: number; costUsd: number };
     }) => {
       if (suggestion.suggestedTitle) setTitle(suggestion.suggestedTitle);
@@ -273,6 +277,7 @@ export default function DocumentReviewScreen() {
       if (suggestion.date) setSuggestedDate(suggestion.date);
       if (suggestion.vendor) setSuggestedVendor(suggestion.vendor);
       if (Array.isArray(suggestion.amounts)) setSuggestedAmounts(suggestion.amounts);
+      if (suggestion.facts) setSuggestedFacts(suggestion.facts);
       if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
     };
 
@@ -291,6 +296,7 @@ export default function DocumentReviewScreen() {
             tags: string[]; notes: string; suggestedFolderName: string;
             suggestedSubfolderName?: string;
             source?: string; date?: string; vendor?: string; amounts?: number[];
+            facts?: DocumentFacts;
             usage?: { inputTokens: number; outputTokens: number; costUsd: number };
           }>('/v1/ai/suggest-document', {
             method: 'POST',
@@ -335,6 +341,7 @@ export default function DocumentReviewScreen() {
               tags: string[]; notes: string; suggestedFolderName: string;
               suggestedSubfolderName?: string;
               source?: string; date?: string; vendor?: string; amounts?: number[];
+              facts?: DocumentFacts;
               usage?: { inputTokens: number; outputTokens: number; costUsd: number };
             }>('/v1/ai/suggest-document', {
               method: 'POST',
@@ -422,6 +429,9 @@ export default function DocumentReviewScreen() {
         ...(suggestedDate ? { inferredDate: suggestedDate } : {}),
         ...(suggestedVendor ? { vendor: suggestedVendor } : {}),
         ...(suggestedAmounts.length > 0 ? { amounts: suggestedAmounts } : {}),
+        ...(suggestedFacts ? { facts: suggestedFacts } : {}),
+        source: params.source,
+        ...(params.name ? { sourceLabel: params.name } : {}),
       });
 
       // 5. Auto-file into suggested folder (find or create)
@@ -455,7 +465,7 @@ export default function DocumentReviewScreen() {
     } finally {
       if (isMounted.current) setIsSaving(false);
     }
-  }, [params, title, category, suggestedTags, ocrText, ocrStatus, addDocument, isSaving, documents.length, isPro, suggestedAiSource, suggestedDate, suggestedVendor, suggestedAmounts]);
+  }, [params, title, category, suggestedTags, ocrText, ocrStatus, addDocument, isSaving, documents.length, isPro, suggestedAiSource, suggestedDate, suggestedVendor, suggestedAmounts, suggestedFacts]);
 
   const isImage = !isPDFLike(params.uri ?? '', params.mimeType);
   const ocrStatusDisplay = getOcrStatusDisplay(ocrStatus, aiStatus, ocrText, isPro);
@@ -554,6 +564,44 @@ export default function DocumentReviewScreen() {
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>AI Notes</Text>
             <Text style={[styles.ocrMuted, { color: C.ash }]}>{suggestedNotes}</Text>
+          </View>
+        ) : null}
+
+        {suggestedFacts && Object.values(suggestedFacts).some(Boolean) ? (
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Autopilot extracted</Text>
+            <View style={styles.tagRow}>
+              {suggestedFacts.personName ? (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>Person: {suggestedFacts.personName}</Text>
+                </View>
+              ) : null}
+              {suggestedFacts.issuer ? (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>Issuer: {suggestedFacts.issuer}</Text>
+                </View>
+              ) : null}
+              {suggestedFacts.issueDate ? (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>Issued: {suggestedFacts.issueDate}</Text>
+                </View>
+              ) : null}
+              {suggestedFacts.expirationDate ? (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>Expires: {suggestedFacts.expirationDate}</Text>
+                </View>
+              ) : null}
+              {suggestedFacts.dueDate ? (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>Due: {suggestedFacts.dueDate}</Text>
+                </View>
+              ) : null}
+              {typeof suggestedFacts.amountDue === 'number' ? (
+                <View style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>Amount: ${suggestedFacts.amountDue.toFixed(2)}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         ) : null}
 

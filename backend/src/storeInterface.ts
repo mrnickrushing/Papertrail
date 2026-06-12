@@ -32,6 +32,7 @@ export interface FiletrailStore {
   getShareLink(token: string): Promise<ShareLinkStoreRecord | null>;
   listShareLinks(limit?: number): Promise<ShareLinkRecord[]>;
   addInboundEmail(input: Omit<EmailInboundRecord, 'id' | 'receivedAt'>): Promise<EmailInboundRecord>;
+  listInboundEmails(limit?: number): Promise<EmailInboundRecord[]>;
   addAnalytics(events: Array<Omit<AnalyticsRecord, 'id' | 'createdAt'>>): Promise<number>;
   getAnalytics(limit?: number): Promise<AnalyticsRecord[]>;
   registerUser(input: Omit<UserRecord, 'isPro' | 'createdAt'>): Promise<UserRecord>;

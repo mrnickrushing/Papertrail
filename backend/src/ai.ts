@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse') as (buffer: Buffer, options?: { max?: number }) => Promise<{ text: string }>;
-import type { DocumentCategory } from './types.js';
+import type { DocumentCategory, DocumentFacts } from './types.js';
 
 const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL?.trim() || 'claude-haiku-4-5-20251001';
 
@@ -81,6 +81,7 @@ type SuggestResult = {
   date?: string;
   vendor?: string;
   amounts?: number[];
+  facts?: DocumentFacts;
   source: 'heuristic' | 'claude';
   usage?: { inputTokens: number; outputTokens: number; costUsd: number };
 };
@@ -118,6 +119,96 @@ function titleCaseWord(word: string): string {
   if (!word) return word;
   if (/^(II|III|IV|VI|VII|VIII|IX|X)$/.test(word)) return word;
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function normalizeFactValue(raw: string | undefined, max = 100): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  return cleaned ? cleaned.slice(0, max) : undefined;
+}
+
+function firstMatch(text: string, pattern: RegExp): string | undefined {
+  const match = text.match(pattern);
+  return normalizeFactValue(match?.[1]);
+}
+
+function normalizeIsoDate(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const slash = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const month = slash[1].padStart(2, '0');
+    const day = slash[2].padStart(2, '0');
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+    return `${year}-${month}-${day}`;
+  }
+  return undefined;
+}
+
+function scoreFacts(facts: DocumentFacts): DocumentFacts['confidence'] {
+  const populated = Object.values(facts).filter(Boolean).length;
+  if (populated >= 6) return 'high';
+  if (populated >= 3) return 'medium';
+  return 'low';
+}
+
+function extractFacts(input: {
+  title?: string;
+  filename?: string;
+  ocrText?: string;
+  category: DocumentCategory;
+  vendor?: string;
+  amounts?: number[];
+  date?: string;
+  personName?: string;
+}): DocumentFacts | undefined {
+  const text = `${input.title ?? ''}\n${input.filename ?? ''}\n${input.ocrText ?? ''}`;
+  const normalizedText = text.replace(/\r/g, '');
+  const personName = input.personName ? normalizePersonName(input.personName) : undefined;
+  const issueDate = normalizeIsoDate(
+    input.date
+      || firstMatch(normalizedText, /\b(?:date of birth|dob)\b[:\s-]*([0-9/.-]{6,12})/i)
+      || firstMatch(normalizedText, /\b(?:issue(?:d)? date|date issued|issued on)\b[:\s-]*([0-9/.-]{6,12})/i)
+      || firstMatch(normalizedText, /\bdate\b[:\s-]*([0-9/.-]{6,12})/i),
+  );
+  const expirationDate = normalizeIsoDate(
+    firstMatch(normalizedText, /\b(?:expir(?:ation|es|y) date|expires?|valid thru|valid until)\b[:\s-]*([0-9/.-]{6,12})/i),
+  );
+  const dueDate = normalizeIsoDate(
+    firstMatch(normalizedText, /\b(?:payment due|due date|pay by)\b[:\s-]*([0-9/.-]{6,12})/i),
+  );
+  const policyNumber = firstMatch(normalizedText, /\bpolicy(?: number| no\.?)?\b[:\s#-]*([A-Z0-9-]{4,})/i);
+  const accountNumber = firstMatch(normalizedText, /\baccount(?: number| no\.?)?\b[:\s#-]*([A-Z0-9-]{4,})/i);
+  const memberNumber = firstMatch(normalizedText, /\bmember(?: number| id| no\.?)?\b[:\s#-]*([A-Z0-9-]{4,})/i);
+  const issuer = normalizeFactValue(
+    input.vendor
+    || firstMatch(normalizedText, /\b(?:issued by|issuer|provider|hospital|clinic|agency|department)\b[:\s-]*([A-Za-z0-9&.,' -]{3,})/i),
+  );
+  const documentType = normalizeFactValue(
+    firstMatch(normalizedText, /\b(birth certificate|driver(?:'s)? license|passport|insurance card|insurance policy|medical record|lab result|bill|invoice|statement|school transcript|report card)\b/i)
+    || `${input.category.charAt(0).toUpperCase()}${input.category.slice(1)} document`,
+    60,
+  );
+  const amountDue = typeof input.amounts?.[0] === 'number'
+    ? input.amounts[0]
+    : undefined;
+
+  const facts: DocumentFacts = {
+    ...(personName ? { personName } : {}),
+    ...(documentType ? { documentType } : {}),
+    ...(issuer ? { issuer } : {}),
+    ...(issueDate ? { issueDate } : {}),
+    ...(expirationDate ? { expirationDate } : {}),
+    ...(dueDate ? { dueDate } : {}),
+    ...(policyNumber ? { policyNumber } : {}),
+    ...(accountNumber ? { accountNumber } : {}),
+    ...(memberNumber ? { memberNumber } : {}),
+    ...(typeof amountDue === 'number' ? { amountDue } : {}),
+  };
+
+  if (Object.keys(facts).length === 0) return undefined;
+  return { ...facts, confidence: scoreFacts(facts) };
 }
 
 function normalizePersonName(raw: string): string {
@@ -275,6 +366,13 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
     category,
     suggestedSubfolderName,
   );
+  const facts = extractFacts({
+    title: suggestedTitle,
+    filename: input.filename,
+    ocrText: input.ocrText,
+    category,
+    personName: suggestedSubfolderName,
+  });
 
   return {
     suggestedTitle,
@@ -282,6 +380,7 @@ function heuristicSuggest(input: { title?: string; filename?: string; ocrText?: 
     ...(suggestedSubfolderName ? { suggestedSubfolderName } : {}),
     category,
     tags,
+    ...(facts ? { facts } : {}),
     source: 'heuristic',
   };
 }
@@ -343,7 +442,19 @@ function buildSchemaPrompt(existingFolders?: string[]): string {
 - "vendor": merchant, organization, or issuing party name, or omit if not applicable
 - "amounts": array of numeric monetary values (no currency symbols, e.g. [142.50, 9.99]), or omit if none
 - "folderName": the folder to file this in — use the standard name for the category (e.g. "Receipts", "Contracts", "Tax Documents", "Medical Records") but use a more specific name when clearly appropriate (e.g. "Court Documents" for legal filings, "Insurance" for insurance docs); keep it short.${folderGuidance}
-- "subfolderName": for documents that are clearly about a specific person (especially medical records, IDs, passports, birth certificates, school records, or similar personal records), return that person's full name exactly as it appears on the document for use as a subfolder name; omit if no clear person name is found. Prefer the subject of the document, not the issuing agency, provider, parent, witness, or clerk. Examples: for a birth certificate use the child's name, for a driver's license use the cardholder's name, for a lab result use the patient's name.`;
+- "subfolderName": for documents that are clearly about a specific person (especially medical records, IDs, passports, birth certificates, school records, or similar personal records), return that person's full name exactly as it appears on the document for use as a subfolder name; omit if no clear person name is found. Prefer the subject of the document, not the issuing agency, provider, parent, witness, or clerk. Examples: for a birth certificate use the child's name, for a driver's license use the cardholder's name, for a lab result use the patient's name.
+- "facts": optional object containing any extracted structured fields that clearly appear on the document:
+  - "personName"
+  - "documentType"
+  - "issuer"
+  - "issueDate" (YYYY-MM-DD)
+  - "expirationDate" (YYYY-MM-DD)
+  - "dueDate" (YYYY-MM-DD)
+  - "policyNumber"
+  - "accountNumber"
+  - "memberNumber"
+  - "amountDue" (number only)
+  - "confidence": one of low, medium, high`;
 }
 
 export async function suggestDocument(input: {
@@ -518,7 +629,48 @@ export async function suggestDocument(input: {
         }
       : undefined;
 
-    return { suggestedTitle: suggestedTitleWithPerson, suggestedFolderName, suggestedSubfolderName, category, tags, notes, date, vendor, amounts, source: 'claude', usage: usageResult };
+    const parsedFacts = typeof parsed.facts === 'object' && parsed.facts !== null ? parsed.facts as Record<string, unknown> : {};
+    const inferredFacts = extractFacts({
+      title: suggestedTitleWithPerson,
+      filename: input.filename,
+      ocrText: input.ocrText?.trim(),
+      category,
+      vendor,
+      amounts,
+      date,
+      personName: suggestedSubfolderName,
+    });
+    const facts: DocumentFacts | undefined = {
+      ...(typeof parsedFacts.personName === 'string' ? { personName: normalizePersonName(parsedFacts.personName) } : {}),
+      ...(typeof parsedFacts.documentType === 'string' ? { documentType: parsedFacts.documentType.trim().slice(0, 60) } : {}),
+      ...(typeof parsedFacts.issuer === 'string' ? { issuer: parsedFacts.issuer.trim().slice(0, 100) } : {}),
+      ...(typeof parsedFacts.issueDate === 'string' && normalizeIsoDate(parsedFacts.issueDate) ? { issueDate: normalizeIsoDate(parsedFacts.issueDate) } : {}),
+      ...(typeof parsedFacts.expirationDate === 'string' && normalizeIsoDate(parsedFacts.expirationDate) ? { expirationDate: normalizeIsoDate(parsedFacts.expirationDate) } : {}),
+      ...(typeof parsedFacts.dueDate === 'string' && normalizeIsoDate(parsedFacts.dueDate) ? { dueDate: normalizeIsoDate(parsedFacts.dueDate) } : {}),
+      ...(typeof parsedFacts.policyNumber === 'string' ? { policyNumber: parsedFacts.policyNumber.trim().slice(0, 40) } : {}),
+      ...(typeof parsedFacts.accountNumber === 'string' ? { accountNumber: parsedFacts.accountNumber.trim().slice(0, 40) } : {}),
+      ...(typeof parsedFacts.memberNumber === 'string' ? { memberNumber: parsedFacts.memberNumber.trim().slice(0, 40) } : {}),
+      ...(typeof parsedFacts.amountDue === 'number' && Number.isFinite(parsedFacts.amountDue) ? { amountDue: parsedFacts.amountDue } : {}),
+      ...(parsedFacts.confidence === 'low' || parsedFacts.confidence === 'medium' || parsedFacts.confidence === 'high'
+        ? { confidence: parsedFacts.confidence }
+        : {}),
+      ...inferredFacts,
+    };
+
+    return {
+      suggestedTitle: suggestedTitleWithPerson,
+      suggestedFolderName,
+      suggestedSubfolderName,
+      category,
+      tags,
+      notes,
+      date,
+      vendor,
+      amounts,
+      ...(Object.keys(facts).length > 0 ? { facts: { ...facts, confidence: facts.confidence ?? scoreFacts(facts) } } : {}),
+      source: 'claude',
+      usage: usageResult,
+    };
   } catch (err) {
     console.error('[ai.suggestDocument] Claude call failed, falling back to heuristics:', err instanceof Error ? err.message : err);
     return heuristicSuggest({ ...input, ocrText: input.ocrText?.trim() });

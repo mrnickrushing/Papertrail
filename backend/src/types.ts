@@ -19,6 +19,28 @@ export type DocumentCategory =
 
 export type OCRStatus = 'pending' | 'processing' | 'done' | 'failed' | 'unavailable';
 
+export type DocumentSource = 'camera' | 'photo' | 'file' | 'email';
+
+export type DocumentFacts = {
+  personName?: string;
+  documentType?: string;
+  issuer?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  dueDate?: string;
+  policyNumber?: string;
+  accountNumber?: string;
+  memberNumber?: string;
+  amountDue?: number;
+  confidence?: 'low' | 'medium' | 'high';
+};
+
+export type EmailSourceRecord = {
+  sender: string;
+  subject?: string;
+  receivedAt?: string;
+};
+
 export type DocumentRecord = {
   id: string;
   title: string;
@@ -33,6 +55,10 @@ export type DocumentRecord = {
   inferredDate?: string;
   amounts?: number[];
   vendor?: string;
+  source?: DocumentSource;
+  sourceLabel?: string;
+  emailSource?: EmailSourceRecord;
+  facts?: DocumentFacts;
   isFavorite: boolean;
   folderId: string | null;
   tags: string[];
@@ -79,6 +105,7 @@ export type ShareLinkStoreRecord = ShareLinkRecord & {
 
 export type EmailInboundRecord = {
   id: string;
+  recipient?: string;
   sender: string;
   subject: string;
   receivedAt: string;

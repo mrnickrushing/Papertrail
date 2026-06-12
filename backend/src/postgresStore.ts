@@ -235,6 +235,29 @@ export class PostgresStore implements FiletrailStore {
     return { ...input, id, receivedAt };
   }
 
+  async listInboundEmails(limit = 100): Promise<EmailInboundRecord[]> {
+    const res = await this.pool.query<{
+      id: string;
+      sender: string;
+      subject: string;
+      attachments: Array<{ filename: string; mimeType: string; sizeBytes: number }> | string;
+      received_at: Date;
+    }>(
+      `SELECT id, sender, subject, attachments, received_at
+       FROM inbound_emails
+       ORDER BY received_at DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return res.rows.map((row) => ({
+      id: row.id,
+      sender: row.sender,
+      subject: row.subject,
+      attachments: Array.isArray(row.attachments) ? row.attachments : JSON.parse(row.attachments || '[]'),
+      receivedAt: row.received_at.toISOString(),
+    }));
+  }
+
   async addAnalytics(events: Array<Omit<AnalyticsRecord, 'id' | 'createdAt'>>): Promise<number> {
     const client = await this.pool.connect();
     try {

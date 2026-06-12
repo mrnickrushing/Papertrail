@@ -37,6 +37,15 @@ function parseBody<T>(schema: { parse: (value: unknown) => T }, body: unknown): 
 export async function buildApp(config: RuntimeConfig, store: FiletrailStore = new JsonStore(config.dataDir)): Promise<FastifyInstance> {
   await store.init();
 
+  function emailSlug(email: string): string {
+    return email
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '.')
+      .replace(/^\.+|\.+$/g, '')
+      .slice(0, 48);
+  }
+
   const app = Fastify({
     logger: config.nodeEnv !== 'test',
     bodyLimit: 10 * 1024 * 1024,
@@ -160,6 +169,32 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     const input = parseBody(emailInboundSchema, request.body);
     const record = await store.addInboundEmail(input);
     return { ok: true, inboundId: record.id, receivedAt: record.receivedAt };
+  });
+
+  app.get('/v1/email/inbound', async (request) => {
+    const { limit } = request.query as { limit?: string };
+    const emails = await store.listInboundEmails(limit ? Math.max(1, Math.min(200, Number(limit) || 100)) : 100);
+    return { emails };
+  });
+
+  app.get('/v1/email/config', async (request) => {
+    const { email } = request.query as { email?: string };
+    const forwardingAddress = config.inboundEmailDomain && email
+      ? `filetrail+${emailSlug(email)}@${config.inboundEmailDomain}`
+      : null;
+    return {
+      forwardingAddress,
+      inboundEnabled: Boolean(config.inboundEmailDomain),
+      domain: config.inboundEmailDomain,
+      instructions: forwardingAddress
+        ? [
+            'Forward bills, statements, insurance emails, and school paperwork to this address.',
+            'Attachments should arrive in the Autopilot email feed after your inbound provider posts them here.',
+          ]
+        : [
+            'Set INBOUND_EMAIL_DOMAIN on the backend to generate a forwarding address for each account.',
+          ],
+    };
   });
 
   app.post('/v1/analytics/events', async (request) => {

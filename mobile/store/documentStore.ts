@@ -215,6 +215,45 @@ function sanitizeDocument(value: unknown): Document | null {
       ? value.amounts.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
       : undefined,
     vendor: typeof value.vendor === 'string' ? value.vendor : undefined,
+    source:
+      value.source === 'camera' ||
+      value.source === 'photo' ||
+      value.source === 'file' ||
+      value.source === 'email'
+        ? value.source
+        : undefined,
+    sourceLabel: typeof value.sourceLabel === 'string' ? value.sourceLabel : undefined,
+    emailSource:
+      isRecord(value.emailSource) && typeof value.emailSource.sender === 'string'
+        ? {
+            sender: value.emailSource.sender,
+            subject: typeof value.emailSource.subject === 'string' ? value.emailSource.subject : undefined,
+            receivedAt: typeof value.emailSource.receivedAt === 'string' ? value.emailSource.receivedAt : undefined,
+          }
+        : undefined,
+    facts:
+      isRecord(value.facts)
+        ? {
+            personName: typeof value.facts.personName === 'string' ? value.facts.personName : undefined,
+            documentType: typeof value.facts.documentType === 'string' ? value.facts.documentType : undefined,
+            issuer: typeof value.facts.issuer === 'string' ? value.facts.issuer : undefined,
+            issueDate: typeof value.facts.issueDate === 'string' ? value.facts.issueDate : undefined,
+            expirationDate: typeof value.facts.expirationDate === 'string' ? value.facts.expirationDate : undefined,
+            dueDate: typeof value.facts.dueDate === 'string' ? value.facts.dueDate : undefined,
+            policyNumber: typeof value.facts.policyNumber === 'string' ? value.facts.policyNumber : undefined,
+            accountNumber: typeof value.facts.accountNumber === 'string' ? value.facts.accountNumber : undefined,
+            memberNumber: typeof value.facts.memberNumber === 'string' ? value.facts.memberNumber : undefined,
+            amountDue: typeof value.facts.amountDue === 'number' && Number.isFinite(value.facts.amountDue)
+              ? value.facts.amountDue
+              : undefined,
+            confidence:
+              value.facts.confidence === 'low' ||
+              value.facts.confidence === 'medium' ||
+              value.facts.confidence === 'high'
+                ? value.facts.confidence
+                : undefined,
+          }
+        : undefined,
     isFavorite: value.isFavorite === true,
     folderId: typeof value.folderId === 'string' ? value.folderId : null,
     tags: stringArrayValue(value.tags),

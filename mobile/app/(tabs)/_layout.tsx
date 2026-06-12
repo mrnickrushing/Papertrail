@@ -62,6 +62,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="autopilot"
+        options={{
+          title: 'Auto',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="zap" color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="search"
         options={{
           title: 'Search',

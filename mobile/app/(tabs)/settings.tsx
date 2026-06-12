@@ -68,6 +68,12 @@ export default function SettingsScreen() {
           onPress={() => router.push('/settings/storage')}
         />
         <SettingsNavRow
+          label="Email to Vault"
+          value="Forward documents into Autopilot"
+          icon="mail"
+          onPress={() => router.push('/settings/email')}
+        />
+        <SettingsNavRow
           label="Security"
           value={biometricEnabled ? 'Biometric lock on' : 'Biometric lock off'}
           icon="shield"
