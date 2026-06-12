@@ -89,18 +89,27 @@ export const MIGRATIONS = [
         password_hash text NOT NULL,
         provider text NOT NULL DEFAULT 'email',
         apple_user_id text,
+        storage_access_token text NOT NULL,
         is_pro boolean NOT NULL DEFAULT false,
         created_at timestamptz NOT NULL DEFAULT now(),
         CONSTRAINT users_email_unique UNIQUE (email)
       );
       CREATE INDEX IF NOT EXISTS users_email_idx ON users(email);
       CREATE INDEX IF NOT EXISTS users_created_at_idx ON users(created_at);
+      CREATE INDEX IF NOT EXISTS users_storage_access_token_idx ON users(storage_access_token);
     `,
   },
   {
     id: 4,
     sql: `
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS storage_url text;
+    `,
+  },
+  {
+    id: 5,
+    sql: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS storage_access_token text;
+      CREATE INDEX IF NOT EXISTS users_storage_access_token_idx ON users(storage_access_token);
     `,
   },
 ] as const;

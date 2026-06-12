@@ -14,6 +14,10 @@ import { toPublicShareLinkRecord } from './shareLinks.js';
 
 const { Pool } = pg;
 
+function newStorageAccessToken(): string {
+  return randomUUID().replace(/-/g, '');
+}
+
 export class PostgresStore implements FiletrailStore {
   private readonly pool: pg.Pool;
 
@@ -56,6 +60,15 @@ export class PostgresStore implements FiletrailStore {
     } finally {
       client.release();
     }
+  }
+
+  private async ensureUserStorageToken(id: string): Promise<string | null> {
+    const existing = await this.getUserById(id);
+    if (!existing) return null;
+    if (existing.storageAccessToken) return existing.storageAccessToken;
+    const token = newStorageAccessToken();
+    await this.updateUser(id, { storageAccessToken: token });
+    return token;
   }
 
   async push(input: SyncPushInput): Promise<{ syncVersion: number }> {
@@ -307,20 +320,34 @@ export class PostgresStore implements FiletrailStore {
   async registerUser(input: Omit<UserRecord, 'isPro' | 'createdAt'>): Promise<UserRecord> {
     const createdAt = new Date().toISOString();
     await this.pool.query(
-      `INSERT INTO users (id, full_name, email, password_hash, provider, apple_user_id, is_pro, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, false, $7)
+      `INSERT INTO users (id, full_name, email, password_hash, provider, apple_user_id, storage_access_token, is_pro, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)
        ON CONFLICT (email) DO NOTHING`,
-      [input.id, input.fullName, input.email, input.passwordHash, input.provider, input.appleUserId ?? null, createdAt],
+      [
+        input.id,
+        input.fullName,
+        input.email,
+        input.passwordHash,
+        input.provider,
+        input.appleUserId ?? null,
+        input.storageAccessToken || newStorageAccessToken(),
+        createdAt,
+      ],
     );
     const existing = await this.getUserByEmail(input.email);
     if (!existing) throw new Error('Registration failed');
+    if (!existing.storageAccessToken) {
+      const token = newStorageAccessToken();
+      await this.updateUser(existing.id, { storageAccessToken: token });
+      return { ...existing, storageAccessToken: token };
+    }
     return existing;
   }
 
   async getUserById(id: string): Promise<UserRecord | null> {
     const res = await this.pool.query<{
       id: string; full_name: string; email: string; password_hash: string;
-      provider: string; apple_user_id: string | null; is_pro: boolean; created_at: Date;
+      provider: string; apple_user_id: string | null; storage_access_token: string | null; is_pro: boolean; created_at: Date;
     }>('SELECT * FROM users WHERE id = $1', [id]);
     const row = res.rows[0];
     if (!row) return null;
@@ -331,6 +358,7 @@ export class PostgresStore implements FiletrailStore {
       passwordHash: row.password_hash,
       provider: row.provider as 'email' | 'apple',
       appleUserId: row.apple_user_id ?? undefined,
+      storageAccessToken: row.storage_access_token ?? '',
       isPro: row.is_pro,
       createdAt: row.created_at.toISOString(),
     };
@@ -339,7 +367,7 @@ export class PostgresStore implements FiletrailStore {
   async getUserByEmail(email: string): Promise<UserRecord | null> {
     const res = await this.pool.query<{
       id: string; full_name: string; email: string; password_hash: string;
-      provider: string; apple_user_id: string | null; is_pro: boolean; created_at: Date;
+      provider: string; apple_user_id: string | null; storage_access_token: string | null; is_pro: boolean; created_at: Date;
     }>('SELECT * FROM users WHERE email = $1', [email]);
     const row = res.rows[0];
     if (!row) return null;
@@ -350,6 +378,7 @@ export class PostgresStore implements FiletrailStore {
       passwordHash: row.password_hash,
       provider: row.provider as 'email' | 'apple',
       appleUserId: row.apple_user_id ?? undefined,
+      storageAccessToken: row.storage_access_token ?? '',
       isPro: row.is_pro,
       createdAt: row.created_at.toISOString(),
     };
@@ -358,7 +387,7 @@ export class PostgresStore implements FiletrailStore {
   async listUsers(limit = 500): Promise<UserRecord[]> {
     const res = await this.pool.query<{
       id: string; full_name: string; email: string; password_hash: string;
-      provider: string; apple_user_id: string | null; is_pro: boolean; created_at: Date;
+      provider: string; apple_user_id: string | null; storage_access_token: string | null; is_pro: boolean; created_at: Date;
     }>('SELECT * FROM users ORDER BY created_at DESC LIMIT $1', [limit]);
     return res.rows.map(row => ({
       id: row.id,
@@ -367,18 +396,20 @@ export class PostgresStore implements FiletrailStore {
       passwordHash: row.password_hash,
       provider: row.provider as 'email' | 'apple',
       appleUserId: row.apple_user_id ?? undefined,
+      storageAccessToken: row.storage_access_token ?? '',
       isPro: row.is_pro,
       createdAt: row.created_at.toISOString(),
     }));
   }
 
-  async updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string }): Promise<UserRecord | null> {
+  async updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string; storageAccessToken?: string }): Promise<UserRecord | null> {
     const sets: string[] = [];
     const values: unknown[] = [];
     let idx = 1;
     if (patch.isPro !== undefined) { sets.push(`is_pro = $${idx++}`); values.push(patch.isPro); }
     if (patch.fullName !== undefined) { sets.push(`full_name = $${idx++}`); values.push(patch.fullName); }
     if (patch.email !== undefined) { sets.push(`email = $${idx++}`); values.push(patch.email); }
+    if (patch.storageAccessToken !== undefined) { sets.push(`storage_access_token = $${idx++}`); values.push(patch.storageAccessToken); }
     if (sets.length === 0) return this.getUserById(id);
     values.push(id);
     await this.pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${idx}`, values);

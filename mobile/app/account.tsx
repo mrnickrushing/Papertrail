@@ -21,7 +21,7 @@ import {
   validateAdminBypassCode,
 } from '@/services/adminAccess';
 import { C, R, S, T } from '@/theme/tokens';
-import { hashPassword, verifyPassword, registerUserWithBackend } from '@/services/userService';
+import { hashPassword, verifyPassword, registerUserWithBackend, loginUserWithBackend } from '@/services/userService';
 import { createHash } from '@/services/hashUtils';
 import {
   getStoredPasswordHash,
@@ -212,7 +212,6 @@ export default function AccountScreen() {
       provider: 'email' as const,
       createdAt: new Date().toISOString(),
     };
-    completeAccountSetup(newProfile);
     startTour();
 
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -224,37 +223,31 @@ export default function AccountScreen() {
       provider: 'email',
     });
     // Persist the server-assigned userId so backend sync can reference it later.
-    if (regResult.userId) {
-      completeAccountSetup({ ...newProfile, userId: regResult.userId });
-    }
+    completeAccountSetup({
+      ...newProfile,
+      userId: regResult.userId,
+      storageAccessToken: regResult.storageAccessToken,
+    });
   }
 
   async function loginWithManualProfile() {
     const normalizedEmail = normalizeEmail(email);
-
-    if (!accountProfile) {
-      setMode('create');
-      fail('No local account exists on this device yet. Create one first.');
-      return;
-    }
-
-    if (accountProfile.provider === 'apple') {
-      fail('This account uses Apple sign in. Continue with Apple below.');
-      return;
-    }
-
     if (!isValidEmail(normalizedEmail)) {
       fail('Enter the email address attached to this FileTrail account.');
       return;
     }
 
-    if (normalizeEmail(accountProfile.email) !== normalizedEmail) {
-      fail('That email does not match the FileTrail account stored on this device.');
+    if (accountProfile?.provider === 'apple') {
+      fail('This account uses Apple sign in. Continue with Apple below.');
       return;
     }
 
-    const existingHash = await getStoredPasswordHash();
-    if (existingHash) {
+    const existingHash = accountProfile ? await getStoredPasswordHash() : null;
+    if (existingHash && accountProfile) {
+      if (normalizeEmail(accountProfile.email) !== normalizedEmail) {
+        fail('That email does not match the FileTrail account stored on this device.');
+        return;
+      }
       const { ok, needsRehash } = await verifyPassword(password, existingHash);
       if (!ok) {
         fail('That password does not match this FileTrail account.');
@@ -272,12 +265,25 @@ export default function AccountScreen() {
       }
     }
 
-    if (!existingHash && password.trim().length > 0) {
-      fail('This local account was created before passwords were required. Leave password blank or recreate the account.');
+    const backendHash = await hashPassword(password);
+    const backendLogin = await loginUserWithBackend({
+      email: normalizedEmail,
+      passwordHash: backendHash,
+    });
+
+    if (!backendLogin.ok || !backendLogin.userId || !backendLogin.storageAccessToken) {
+      fail('Could not reconnect this account to the backend. Check your email and password, then try again.');
       return;
     }
 
-    setAccountAuthenticated(true);
+    completeAccountSetup({
+      fullName: backendLogin.fullName ?? accountProfile?.fullName ?? 'FileTrail User',
+      email: backendLogin.email ?? normalizedEmail,
+      provider: 'email',
+      createdAt: backendLogin.createdAt ?? accountProfile?.createdAt ?? new Date().toISOString(),
+      userId: backendLogin.userId,
+      storageAccessToken: backendLogin.storageAccessToken,
+    });
   }
 
   async function handleManualSubmit() {
@@ -381,22 +387,22 @@ export default function AccountScreen() {
           appleUserId: credential.user,
           createdAt: new Date().toISOString(),
         };
-        completeAccountSetup(appleProfile);
         startTour();
         // Register Apple user on backend (fire-and-forget — local auth already set)
         const appleId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-        registerUserWithBackend({
+        const appleResult = await registerUserWithBackend({
           id: appleId,
           fullName: appleProfile.fullName,
           email: appleProfile.email,
           passwordHash: '',
           provider: 'apple',
           appleUserId: credential.user,
-        }).then((res) => {
-          if (res.userId) {
-            completeAccountSetup({ ...appleProfile, userId: res.userId });
-          }
-        }).catch(() => undefined);
+        });
+        completeAccountSetup({
+          ...appleProfile,
+          userId: appleResult.userId,
+          storageAccessToken: appleResult.storageAccessToken,
+        });
         return;
       }
 
@@ -414,6 +420,25 @@ export default function AccountScreen() {
       if (!sameAppleUser && !sameEmail) {
         fail('This Apple ID does not match the FileTrail account stored on this device.');
         return;
+      }
+
+      if (!accountProfile.userId || !accountProfile.storageAccessToken) {
+        const appleResult = await registerUserWithBackend({
+          id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+          fullName: accountProfile.fullName,
+          email: accountProfile.email,
+          passwordHash: '',
+          provider: 'apple',
+          appleUserId: credential.user,
+        });
+        if (appleResult.userId && appleResult.storageAccessToken) {
+          completeAccountSetup({
+            ...accountProfile,
+            userId: appleResult.userId,
+            storageAccessToken: appleResult.storageAccessToken,
+          });
+          return;
+        }
       }
 
       setAccountAuthenticated(true);

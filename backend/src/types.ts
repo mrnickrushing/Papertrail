@@ -132,6 +132,7 @@ export type UserRecord = {
   passwordHash: string;
   provider: 'email' | 'apple';
   appleUserId?: string;
+  storageAccessToken: string;
   isPro: boolean;
   createdAt: string;
 };

@@ -523,6 +523,7 @@ export const useDocumentStore = create<DocumentState>()(
       },
 
       syncWithBackend: async () => {
+        const accountProfile = useAppStore.getState().accountProfile;
         set((s) => ({
           syncState: {
             ...s.syncState,
@@ -539,13 +540,16 @@ export const useDocumentStore = create<DocumentState>()(
         {
           const localDocs = get().documents.filter((d) => d.fileUri);
           const keyedDocs = localDocs.filter((d) => d.storageUrl);
-          const accountProfile = useAppStore.getState().accountProfile;
           const existence = keyedDocs.length > 0
             ? await checkDocumentsInR2(
               keyedDocs.map((doc) => ({
                 documentId: doc.id,
                 storageKey: doc.storageUrl?.replace(/^r2:\/\/[^/]+\//, ''),
               })),
+              accountProfile?.userId && accountProfile.storageAccessToken ? {
+                userId: accountProfile.userId,
+                storageAccessToken: accountProfile.storageAccessToken,
+              } : undefined,
             )
             : new Map<string, boolean>();
           const missing = localDocs.filter((doc) => {
@@ -578,7 +582,6 @@ export const useDocumentStore = create<DocumentState>()(
               const info = await FileSystem.getInfoAsync(localUri);
               if (!info.exists) continue;
 
-              const accountProfile = useAppStore.getState().accountProfile;
               const storageUrl = await uploadDocumentToR2({
                 documentId: doc.id,
                 localUri,
@@ -587,6 +590,8 @@ export const useDocumentStore = create<DocumentState>()(
                 userEmail: accountProfile?.email,
                 category: doc.category,
                 ownerName: accountProfile?.fullName,
+                userId: accountProfile?.userId,
+                storageAccessToken: accountProfile?.storageAccessToken,
               });
               if (storageUrl) {
                 // updatedAt must advance so the push filter below includes
@@ -639,14 +644,16 @@ export const useDocumentStore = create<DocumentState>()(
               const merged = get().documents.find((d) => d.id === doc.id);
               if (!merged || merged.fileUri) continue;
               const ext = getExtension(doc.mimeType);
-              downloadDocumentFromR2({
-                documentId: doc.id,
-                mimeType: doc.mimeType,
-                extension: ext,
-                storageKey: doc.storageUrl
-                  ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
-                  : undefined,
-              }).then((localUri) => {
+                downloadDocumentFromR2({
+                  documentId: doc.id,
+                  mimeType: doc.mimeType,
+                  extension: ext,
+                  storageKey: doc.storageUrl
+                    ? doc.storageUrl.replace(/^r2:\/\/[^/]+\//, '')
+                    : undefined,
+                  userId: accountProfile?.userId,
+                  storageAccessToken: accountProfile?.storageAccessToken,
+                }).then((localUri) => {
                 if (localUri) {
                   set((s) => ({
                     documents: s.documents.map((d) =>

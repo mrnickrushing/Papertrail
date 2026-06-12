@@ -16,6 +16,7 @@ export interface AccountProfile {
   email: string;
   provider: AccountProvider;
   appleUserId?: string;
+  storageAccessToken?: string;
   /**
    * Legacy field — older builds stored the password hash here, persisted to
    * AsyncStorage as plain JSON. New hashes live in expo-secure-store (see

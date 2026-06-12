@@ -14,6 +14,10 @@ import type {
 import type { FiletrailStore, SyncPullOutput, SyncPushInput } from './storeInterface.js';
 import { toPublicShareLinkRecord } from './shareLinks.js';
 
+function newStorageAccessToken(): string {
+  return randomUUID().replace(/-/g, '');
+}
+
 const INITIAL_DATA: AppData = {
   syncVersion: 0,
   documents: {},
@@ -178,9 +182,15 @@ export class JsonStore implements FiletrailStore {
     return this.mutate((data) => {
       if (!data.users) data.users = {};
       const existing = Object.values(data.users).find(u => u.email === input.email);
-      if (existing) return existing;
+      if (existing) {
+        if (!existing.storageAccessToken) {
+          existing.storageAccessToken = newStorageAccessToken();
+        }
+        return existing;
+      }
       const record: UserRecord = {
         ...input,
+        storageAccessToken: input.storageAccessToken || newStorageAccessToken(),
         isPro: false,
         createdAt: new Date().toISOString(),
       };
@@ -209,7 +219,7 @@ export class JsonStore implements FiletrailStore {
       .slice(0, limit);
   }
 
-  async updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string }): Promise<UserRecord | null> {
+  async updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string; storageAccessToken?: string }): Promise<UserRecord | null> {
     return this.mutate((data) => {
       if (!data.users?.[id]) return null;
       data.users[id] = { ...data.users[id], ...patch };

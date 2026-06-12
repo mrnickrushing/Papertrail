@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import type { RuntimeConfig } from './config.js';
 import { JsonStore } from './store.js';
@@ -44,6 +45,28 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
       .replace(/[^a-z0-9]+/g, '.')
       .replace(/^\.+|\.+$/g, '')
       .slice(0, 48);
+  }
+
+  async function authorizeStorageUser(request: {
+    headers: Record<string, string | undefined> | { [key: string]: unknown };
+  }): Promise<Awaited<ReturnType<FiletrailStore['getUserById']>>> {
+    const userId = typeof request.headers['x-filetrail-user-id'] === 'string'
+      ? request.headers['x-filetrail-user-id']
+      : undefined;
+    const storageToken = typeof request.headers['x-filetrail-storage-token'] === 'string'
+      ? request.headers['x-filetrail-storage-token']
+      : undefined;
+
+    if (!userId || !storageToken) {
+      return null;
+    }
+
+    const user = await store.getUserById(userId);
+    if (!user || !user.storageAccessToken || user.storageAccessToken !== storageToken) {
+      return null;
+    }
+
+    return user;
   }
 
   const app = Fastify({
@@ -241,8 +264,20 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
   app.post('/v1/auth/register', async (request, reply) => {
     const input = parseBody(userRegisterSchema, request.body);
     try {
-      const user = await store.registerUser(input);
-      return { ok: true, userId: user.id, createdAt: user.createdAt };
+      const user = await store.registerUser({
+        ...input,
+        storageAccessToken: randomUUID().replace(/-/g, ''),
+      });
+      return {
+        ok: true,
+        userId: user.id,
+        storageAccessToken: user.storageAccessToken,
+        fullName: user.fullName,
+        email: user.email,
+        provider: user.provider,
+        appleUserId: user.appleUserId,
+        createdAt: user.createdAt,
+      };
     } catch {
       return reply.code(409).send({ error: 'Email already registered' });
     }
@@ -255,7 +290,23 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     if (user.passwordHash !== input.passwordHash) {
       return reply.code(401).send({ error: 'Incorrect password' });
     }
-    return { ok: true, userId: user.id, fullName: user.fullName, isPro: user.isPro };
+    let storageAccessToken = user.storageAccessToken;
+    if (!storageAccessToken) {
+      storageAccessToken = randomUUID().replace(/-/g, '');
+      const updated = await store.updateUser(user.id, { storageAccessToken });
+      if (!updated) return reply.code(500).send({ error: 'Could not initialize storage access' });
+    }
+    return {
+      ok: true,
+      userId: user.id,
+      storageAccessToken,
+      fullName: user.fullName,
+      email: user.email,
+      provider: user.provider,
+      appleUserId: user.appleUserId,
+      isPro: user.isPro,
+      createdAt: user.createdAt,
+    };
   });
 
   app.get('/v1/admin/users', async () => {
@@ -289,11 +340,15 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     if (!r2Client || !r2Config) {
       return reply.code(503).send({ error: 'File storage not configured' });
     }
-    const { documentId, mimeType, fileName, userEmail, category, ownerName } = request.body as {
+    const user = await authorizeStorageUser(request);
+    if (!user) {
+      return reply.code(401).send({ error: 'Storage access denied' });
+    }
+
+    const { documentId, mimeType, fileName, category, ownerName } = request.body as {
       documentId?: string;
       mimeType?: string;
       fileName?: string;
-      userEmail?: string;
       category?: string;
       ownerName?: string;
     };
@@ -301,7 +356,7 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
       return reply.code(400).send({ error: 'documentId and mimeType are required' });
     }
 
-    const key = documentKey(documentId, mimeType, fileName, userEmail, category, ownerName);
+    const key = documentKey(documentId, mimeType, fileName, user.email, category, ownerName);
     const uploadUrl = await getUploadUrl(r2Client, r2Config.bucket, key, mimeType);
     // storageUrl is the stable key path — used as a reference, not a public URL.
     // Files are always accessed via fresh presigned GET URLs.
@@ -318,12 +373,15 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     if (!r2Client || !r2Config) {
       return reply.code(503).send({ error: 'File storage not configured' });
     }
+    const user = await authorizeStorageUser(request);
+    if (!user) {
+      return reply.code(401).send({ error: 'Storage access denied' });
+    }
     const { documentId } = request.params as { documentId: string };
-    const { mimeType, storageKey, fileName, userEmail, category, ownerName } = request.query as {
+    const { mimeType, storageKey, fileName, category, ownerName } = request.query as {
       mimeType?: string;
       storageKey?: string;
       fileName?: string;
-      userEmail?: string;
       category?: string;
       ownerName?: string;
     };
@@ -331,10 +389,13 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     let key: string;
     if (storageKey) {
       // Preferred: client passes the exact key stored in document.storageUrl
+      if (!storageKey.startsWith(`${user.email.toLowerCase()}/`) && !storageKey.startsWith(`documents/${documentId}/`)) {
+        return reply.code(403).send({ error: 'Storage key does not belong to this account' });
+      }
       key = storageKey;
     } else if (mimeType) {
       // Fallback: reconstruct key (works when fileName is also provided)
-      key = documentKey(documentId, mimeType, fileName, userEmail, category, ownerName);
+      key = documentKey(documentId, mimeType, fileName, user.email, category, ownerName);
     } else {
       return reply.code(400).send({ error: 'storageKey or mimeType is required' });
     }
@@ -352,6 +413,10 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     if (!r2Client || !r2Config) {
       return reply.code(503).send({ error: 'File storage not configured' });
     }
+    const user = await authorizeStorageUser(request);
+    if (!user) {
+      return reply.code(401).send({ error: 'Storage access denied' });
+    }
 
     const { items } = request.body as {
       items?: Array<{
@@ -359,7 +424,6 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
         storageKey?: string;
         mimeType?: string;
         fileName?: string;
-        userEmail?: string;
         category?: string;
         ownerName?: string;
       }>;
@@ -387,10 +451,13 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
           item.documentId,
           item.mimeType,
           item.fileName,
-          item.userEmail,
+          user.email,
           item.category,
           item.ownerName,
         );
+      }
+      if (key && !key.startsWith(`${user.email.toLowerCase()}/`) && !key.startsWith(`documents/${item.documentId}/`)) {
+        return { documentId: item.documentId, exists: false, error: 'Storage key does not belong to this account' };
       }
 
       const exists = await objectExists(r2Client, r2Config.bucket, key);

@@ -4,6 +4,7 @@ type ApiOptions = {
   method?: 'GET' | 'POST';
   body?: unknown;
   timeoutMs?: number;
+  headers?: Record<string, string>;
 };
 
 export type BackendConfig = {
@@ -48,6 +49,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
       method: options.method ?? 'GET',
       headers: {
         'Content-Type': 'application/json',
+        ...(options.headers ?? {}),
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),

@@ -209,9 +209,11 @@ export async function uploadDocumentToR2(params: {
   localUri: string;
   mimeType: string;
   fileName?: string; // document title — used as the filename in R2
-  userEmail?: string; // owner's email — used as the top-level folder in R2
+  userEmail?: string; // deprecated, kept for fallback only
   category?: string;
   ownerName?: string;
+  userId?: string;
+  storageAccessToken?: string;
 }): Promise<string | null> {
   try {
     const { uploadUrl, storageUrl } = await apiRequest<{
@@ -224,11 +226,16 @@ export async function uploadDocumentToR2(params: {
         documentId: params.documentId,
         mimeType: params.mimeType,
         fileName: params.fileName,
-        userEmail: params.userEmail,
         category: params.category,
         ownerName: params.ownerName,
       },
       timeoutMs: 15000,
+      headers: params.userId && params.storageAccessToken
+        ? {
+            'X-FileTrail-User-Id': params.userId,
+            'X-FileTrail-Storage-Token': params.storageAccessToken,
+          }
+        : undefined,
     });
 
     // Upload the file bytes directly to R2 via the presigned PUT URL.
@@ -255,10 +262,9 @@ export async function checkDocumentsInR2(items: Array<{
   storageKey?: string;
   mimeType?: string;
   fileName?: string;
-  userEmail?: string;
   category?: string;
   ownerName?: string;
-}>): Promise<Map<string, boolean>> {
+}>, auth?: { userId?: string; storageAccessToken?: string }): Promise<Map<string, boolean>> {
   if (items.length === 0) return new Map();
 
   try {
@@ -271,6 +277,12 @@ export async function checkDocumentsInR2(items: Array<{
       method: 'POST',
       body: { items },
       timeoutMs: 15000,
+      headers: auth?.userId && auth?.storageAccessToken
+        ? {
+            'X-FileTrail-User-Id': auth.userId,
+            'X-FileTrail-Storage-Token': auth.storageAccessToken,
+          }
+        : undefined,
     });
 
     return new Map(response.results.map((item) => [item.documentId, item.exists]));
@@ -289,6 +301,8 @@ export async function downloadDocumentFromR2(params: {
   mimeType: string;
   extension: string;
   storageKey?: string; // exact R2 key from document.storageUrl (r2://bucket/<key>)
+  userId?: string;
+  storageAccessToken?: string;
 }): Promise<string | null> {
   try {
     // Build query: prefer storageKey (exact path), fall back to mimeType-only
@@ -297,7 +311,15 @@ export async function downloadDocumentFromR2(params: {
       : `mimeType=${encodeURIComponent(params.mimeType)}`;
     const { downloadUrl } = await apiRequest<{ downloadUrl: string }>(
       `/v1/storage/download-url/${params.documentId}?${qs}`,
-      { timeoutMs: 10000 },
+      {
+        timeoutMs: 10000,
+        headers: params.userId && params.storageAccessToken
+          ? {
+              'X-FileTrail-User-Id': params.userId,
+              'X-FileTrail-Storage-Token': params.storageAccessToken,
+            }
+          : undefined,
+      },
     );
 
     const dir = await ensureDocumentDirectory(params.documentId);
