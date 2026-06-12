@@ -24,7 +24,7 @@ export async function registerUserWithBackend(params: {
 
 export async function loginUserWithBackend(params: {
   email: string;
-  passwordHash: string;
+  password: string;
 }): Promise<{ ok: boolean; userId?: string; storageAccessToken?: string; fullName?: string; email?: string; provider?: 'email' | 'apple'; appleUserId?: string; createdAt?: string; isPro?: boolean }> {
   if (!isBackendConfigured()) return { ok: true };
   try {

@@ -39,7 +39,7 @@ export interface FiletrailStore {
   getUserByEmail(email: string): Promise<UserRecord | null>;
   getUserById(id: string): Promise<UserRecord | null>;
   listUsers(limit?: number): Promise<UserRecord[]>;
-  updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string; storageAccessToken?: string }): Promise<UserRecord | null>;
+  updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string; storageAccessToken?: string; passwordHash?: string }): Promise<UserRecord | null>;
   deleteUser(id: string): Promise<void>;
   deleteShareLink(token: string): Promise<void>;
   adminStats(): Promise<{

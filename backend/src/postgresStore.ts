@@ -402,7 +402,7 @@ export class PostgresStore implements FiletrailStore {
     }));
   }
 
-  async updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string; storageAccessToken?: string }): Promise<UserRecord | null> {
+  async updateUser(id: string, patch: { isPro?: boolean; fullName?: string; email?: string; storageAccessToken?: string; passwordHash?: string }): Promise<UserRecord | null> {
     const sets: string[] = [];
     const values: unknown[] = [];
     let idx = 1;
@@ -410,6 +410,7 @@ export class PostgresStore implements FiletrailStore {
     if (patch.fullName !== undefined) { sets.push(`full_name = $${idx++}`); values.push(patch.fullName); }
     if (patch.email !== undefined) { sets.push(`email = $${idx++}`); values.push(patch.email); }
     if (patch.storageAccessToken !== undefined) { sets.push(`storage_access_token = $${idx++}`); values.push(patch.storageAccessToken); }
+    if (patch.passwordHash !== undefined) { sets.push(`password_hash = $${idx++}`); values.push(patch.passwordHash); }
     if (sets.length === 0) return this.getUserById(id);
     values.push(id);
     await this.pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${idx}`, values);

@@ -22,6 +22,7 @@ import {
   verifyShareLinkPassword,
 } from './shareLinks.js';
 import { suggestDocument } from './ai.js';
+import { hashPassword, verifyPassword } from './hashUtils.js';
 import {
   r2ConfigFromEnv,
   createR2Client,
@@ -287,8 +288,17 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
     const input = parseBody(userLoginSchema, request.body);
     const user = await store.getUserByEmail(input.email);
     if (!user) return reply.code(404).send({ error: 'No account found for that email' });
-    if (user.passwordHash !== input.passwordHash) {
+    const suppliedPassword = input.password ?? input.passwordHash;
+    if (!suppliedPassword) {
+      return reply.code(400).send({ error: 'password is required' });
+    }
+    const { ok, needsRehash } = await verifyPassword(suppliedPassword, user.passwordHash);
+    if (!ok) {
       return reply.code(401).send({ error: 'Incorrect password' });
+    }
+    if (needsRehash) {
+      const upgraded = await hashPassword(suppliedPassword);
+      await store.updateUser(user.id, { passwordHash: upgraded });
     }
     let storageAccessToken = user.storageAccessToken;
     if (!storageAccessToken) {

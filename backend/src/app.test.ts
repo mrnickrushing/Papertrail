@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -85,6 +86,40 @@ test('health endpoint is public', async () => {
 test('v1 endpoints require API key when configured', async () => {
   const res = await app.inject({ method: 'GET', url: '/v1/config' });
   assert.equal(res.statusCode, 401);
+});
+
+test('auth login verifies the stored password after reinstall', async () => {
+  const auth = { Authorization: 'Bearer test-key' };
+  const password = 'correct horse battery staple';
+  const passwordHash = createHash('sha256').update(password).digest('hex');
+
+  const register = await app.inject({
+    method: 'POST',
+    url: '/v1/auth/register',
+    headers: auth,
+    payload: {
+      id: 'user-reconnect-1',
+      fullName: 'Reconnect User',
+      email: 'reconnect@example.com',
+      passwordHash,
+      provider: 'email',
+    },
+  });
+  assert.equal(register.statusCode, 200);
+
+  const login = await app.inject({
+    method: 'POST',
+    url: '/v1/auth/login',
+    headers: auth,
+    payload: {
+      email: 'reconnect@example.com',
+      password,
+    },
+  });
+
+  assert.equal(login.statusCode, 200);
+  assert.equal(login.json().email, 'reconnect@example.com');
+  assert.ok(login.json().storageAccessToken);
 });
 
 test('sync push and pull stores metadata', async () => {

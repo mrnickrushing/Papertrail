@@ -265,10 +265,9 @@ export default function AccountScreen() {
       }
     }
 
-    const backendHash = await hashPassword(password);
     const backendLogin = await loginUserWithBackend({
       email: normalizedEmail,
-      passwordHash: backendHash,
+      password,
     });
 
     if (!backendLogin.ok || !backendLogin.userId || !backendLogin.storageAccessToken) {
