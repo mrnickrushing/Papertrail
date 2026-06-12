@@ -250,6 +250,10 @@ export default function VaultScreen() {
     () => documents.filter(d => !d.folderId).length,
     [documents]
   );
+  const unfiledDocumentIds = useMemo(
+    () => documents.filter((doc) => !doc.folderId).map((doc) => doc.id),
+    [documents]
+  );
   const favoriteCount = useMemo(
     () => documents.filter((d) => d.isFavorite).length,
     [documents]
@@ -336,8 +340,134 @@ export default function VaultScreen() {
     exitSelectionMode();
   }, [selectedIds, bulkSetTags, exitSelectionMode]);
 
-  const handleBulkAiOrganize = useCallback(async () => {
-    if (selectedIds.size === 0) return;
+  const performAiOrganize = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return 0;
+    if (!isPro) {
+      setShowPaywall(true);
+      return 0;
+    }
+    if (!isBackendConfigured()) {
+      Alert.alert('AI Unavailable', 'Configure EXPO_PUBLIC_API_URL to use AI Organize.');
+      return 0;
+    }
+    setIsAiOrganizing(true);
+    setAiOrganizeProgress({ done: 0, total: ids.length });
+
+    const processSingle = async (docId: string): Promise<boolean> => {
+      const doc = documents.find(d => d.id === docId);
+      if (!doc) return false;
+      try {
+        const FILE_SIZE_LIMIT = 4 * 1024 * 1024;
+        const actualSize = doc.fileSizeBytes || (doc.fileUri ? await getFileSize(doc.fileUri) : 0);
+        const canReadFile = !!doc.fileUri && actualSize <= FILE_SIZE_LIMIT;
+        let pdfBase64: string | undefined;
+        let imageBase64: string | undefined;
+        if (!doc.ocrText && canReadFile) {
+          try {
+            if (doc.mimeType === 'application/pdf') {
+              pdfBase64 = await FileSystem.readAsStringAsync(doc.fileUri!, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+            } else if (doc.mimeType.startsWith('image/')) {
+              imageBase64 = await FileSystem.readAsStringAsync(doc.fileUri!, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+            }
+          } catch {
+            // proceed without it
+          }
+        }
+
+        const suggestion = await apiRequest<{
+          suggestedTitle: string;
+          category: DocumentCategory;
+          tags: string[];
+          notes: string;
+          suggestedFolderName: string;
+          suggestedSubfolderName?: string;
+          source?: string;
+          date?: string;
+          vendor?: string;
+          amounts?: number[];
+          usage?: { inputTokens: number; outputTokens: number; costUsd: number };
+        }>('/v1/ai/suggest-document', {
+          method: 'POST',
+          body: {
+            title: doc.title,
+            filename: doc.title,
+            ocrText: doc.ocrText,
+            mimeType: doc.mimeType,
+            pdfBase64,
+            imageBase64,
+            imageMimeType: imageBase64 ? doc.mimeType : undefined,
+            anthropicApiKey: getAnthropicApiKey() ?? undefined,
+            existingFolders: folders.filter(f => !f.parentId).map(f => f.name),
+          },
+          timeoutMs: 30000,
+        });
+        const nextTitle = suggestion.suggestedTitle?.trim() || doc.title;
+        const nextCategory = (suggestion.category || doc.category) as DocumentCategory;
+        const nextTags = Array.isArray(suggestion.tags)
+          ? Array.from(new Set(suggestion.tags.map((t: string) => t.trim()).filter(Boolean)))
+          : doc.tags;
+        const nextNotes = typeof suggestion.notes === 'string' && suggestion.notes.trim()
+          ? suggestion.notes.trim()
+          : undefined;
+        const mergedTags = Array.from(new Set([...doc.tags, ...nextTags]));
+        updateDocumentTags(docId, mergedTags);
+        const aiPatch: Partial<Document> = {
+          title: nextTitle,
+          category: nextCategory,
+          aiSource: suggestion.source === 'claude' ? 'claude' : 'heuristic',
+          aiOrganizedAt: new Date().toISOString(),
+          ...(nextNotes ? { notes: nextNotes } : {}),
+        };
+        if (typeof suggestion.date === 'string' && suggestion.date) aiPatch.inferredDate = suggestion.date;
+        if (typeof suggestion.vendor === 'string' && suggestion.vendor) aiPatch.vendor = suggestion.vendor;
+        if (Array.isArray(suggestion.amounts) && suggestion.amounts.length > 0) aiPatch.amounts = suggestion.amounts;
+        if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
+        updateDocument(docId, aiPatch);
+        if (suggestion.suggestedFolderName) {
+          const parentFolder = findOrCreateFolder(suggestion.suggestedFolderName, undefined, null);
+          if (suggestion.suggestedSubfolderName) {
+            const subFolder = findOrCreateFolder(
+              suggestion.suggestedSubfolderName,
+              parentFolder.color,
+              parentFolder.id,
+            );
+            moveDocumentToFolder(docId, subFolder.id);
+          } else {
+            moveDocumentToFolder(docId, parentFolder.id);
+          }
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    let succeeded = 0;
+    let processed = 0;
+    for (let i = 0; i < ids.length; i += 3) {
+      const batch = ids.slice(i, i + 3);
+      const results = await Promise.allSettled(batch.map(processSingle));
+      succeeded += results.filter(r => r.status === 'fulfilled' && r.value).length;
+      processed += batch.length;
+      setAiOrganizeProgress({ done: processed, total: ids.length });
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setIsAiOrganizing(false);
+    setAiOrganizeProgress(null);
+    return succeeded;
+  }, [
+    documents, folders,
+    updateDocument, updateDocumentTags, moveDocumentToFolder, findOrCreateFolder,
+    recordAiUsageCost,
+  ]);
+
+  const confirmAiOrganize = useCallback((ids: string[], onDone?: () => void) => {
+    if (ids.length === 0) return;
     if (!isPro) {
       setShowPaywall(true);
       return;
@@ -346,7 +476,7 @@ export default function VaultScreen() {
       Alert.alert('AI Unavailable', 'Configure EXPO_PUBLIC_API_URL to use AI Organize.');
       return;
     }
-    const count = selectedIds.size;
+    const count = ids.length;
     Alert.alert(
       `AI Organize ${count} Document${count !== 1 ? 's' : ''}?`,
       'AI will rename, categorize, tag, and file each document. This may take a moment.',
@@ -355,121 +485,8 @@ export default function VaultScreen() {
         {
           text: 'Organize',
           onPress: async () => {
-            const ids = Array.from(selectedIds);
-            exitSelectionMode();
-            setIsAiOrganizing(true);
-            setAiOrganizeProgress({ done: 0, total: ids.length });
-
-            const processSingle = async (docId: string): Promise<boolean> => {
-              const doc = documents.find(d => d.id === docId);
-              if (!doc) return false;
-              try {
-                const FILE_SIZE_LIMIT = 4 * 1024 * 1024;
-                // Some pickers report fileSizeBytes as 0/undefined — fall back
-                // to the actual on-disk size so large files can't slip past
-                // the AI size guard.
-                const actualSize = doc.fileSizeBytes || (doc.fileUri ? await getFileSize(doc.fileUri) : 0);
-                const canReadFile = !!doc.fileUri && actualSize <= FILE_SIZE_LIMIT;
-                let pdfBase64: string | undefined;
-                let imageBase64: string | undefined;
-                if (!doc.ocrText && canReadFile) {
-                  try {
-                    if (doc.mimeType === 'application/pdf') {
-                      pdfBase64 = await FileSystem.readAsStringAsync(doc.fileUri!, {
-                        encoding: FileSystem.EncodingType.Base64,
-                      });
-                    } else if (doc.mimeType.startsWith('image/')) {
-                      imageBase64 = await FileSystem.readAsStringAsync(doc.fileUri!, {
-                        encoding: FileSystem.EncodingType.Base64,
-                      });
-                    }
-                  } catch {
-                    // proceed without it
-                  }
-                }
-
-                const suggestion = await apiRequest<{
-                  suggestedTitle: string;
-                  category: DocumentCategory;
-                  tags: string[];
-                  notes: string;
-                  suggestedFolderName: string;
-                  suggestedSubfolderName?: string;
-                  source?: string;
-                  date?: string;
-                  vendor?: string;
-                  amounts?: number[];
-                  usage?: { inputTokens: number; outputTokens: number; costUsd: number };
-                }>('/v1/ai/suggest-document', {
-                  method: 'POST',
-                  body: {
-                    title: doc.title,
-                    filename: doc.title,
-                    ocrText: doc.ocrText,
-                    mimeType: doc.mimeType,
-                    pdfBase64,
-                    imageBase64,
-                    imageMimeType: imageBase64 ? doc.mimeType : undefined,
-                    anthropicApiKey: getAnthropicApiKey() ?? undefined,
-                    existingFolders: folders.filter(f => !f.parentId).map(f => f.name),
-                  },
-                  timeoutMs: 30000,
-                });
-                const nextTitle = suggestion.suggestedTitle?.trim() || doc.title;
-                const nextCategory = (suggestion.category || doc.category) as DocumentCategory;
-                const nextTags = Array.isArray(suggestion.tags)
-                  ? Array.from(new Set(suggestion.tags.map((t: string) => t.trim()).filter(Boolean)))
-                  : doc.tags;
-                const nextNotes = typeof suggestion.notes === 'string' && suggestion.notes.trim()
-                  ? suggestion.notes.trim()
-                  : undefined;
-                const mergedTags = Array.from(new Set([...doc.tags, ...nextTags]));
-                updateDocumentTags(docId, mergedTags);
-                const aiPatch: Partial<Document> = {
-                  title: nextTitle,
-                  category: nextCategory,
-                  aiSource: suggestion.source === 'claude' ? 'claude' : 'heuristic',
-                  aiOrganizedAt: new Date().toISOString(),
-                  ...(nextNotes ? { notes: nextNotes } : {}),
-                };
-                if (typeof suggestion.date === 'string' && suggestion.date) aiPatch.inferredDate = suggestion.date;
-                if (typeof suggestion.vendor === 'string' && suggestion.vendor) aiPatch.vendor = suggestion.vendor;
-                if (Array.isArray(suggestion.amounts) && suggestion.amounts.length > 0) aiPatch.amounts = suggestion.amounts;
-                if (suggestion.usage) recordAiUsageCost(suggestion.usage.costUsd);
-                updateDocument(docId, aiPatch);
-                if (suggestion.suggestedFolderName) {
-                  const parentFolder = findOrCreateFolder(suggestion.suggestedFolderName, undefined, null);
-                  if (suggestion.suggestedSubfolderName) {
-                    const subFolder = findOrCreateFolder(
-                      suggestion.suggestedSubfolderName,
-                      parentFolder.color,
-                      parentFolder.id,
-                    );
-                    moveDocumentToFolder(docId, subFolder.id);
-                  } else {
-                    moveDocumentToFolder(docId, parentFolder.id);
-                  }
-                }
-                return true;
-              } catch {
-                return false;
-              }
-            };
-
-            // Process in batches of 3
-            let succeeded = 0;
-            let processed = 0;
-            for (let i = 0; i < ids.length; i += 3) {
-              const batch = ids.slice(i, i + 3);
-              const results = await Promise.allSettled(batch.map(processSingle));
-              succeeded += results.filter(r => r.status === 'fulfilled' && r.value).length;
-              processed += batch.length;
-              setAiOrganizeProgress({ done: processed, total: ids.length });
-            }
-
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setIsAiOrganizing(false);
-            setAiOrganizeProgress(null);
+            const succeeded = await performAiOrganize(ids);
+            onDone?.();
             Alert.alert(
               'Done',
               `AI organized ${succeeded} of ${ids.length} document${ids.length !== 1 ? 's' : ''}.`
@@ -478,11 +495,18 @@ export default function VaultScreen() {
         },
       ]
     );
-  }, [
-    selectedIds, isPro, documents, folders,
-    updateDocument, updateDocumentTags, moveDocumentToFolder, findOrCreateFolder,
-    exitSelectionMode, recordAiUsageCost,
-  ]);
+  }, [isPro, performAiOrganize]);
+
+  const handleBulkAiOrganize = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    exitSelectionMode();
+    confirmAiOrganize(ids);
+  }, [selectedIds, confirmAiOrganize, exitSelectionMode]);
+
+  const handleFileAllUnfiled = useCallback(() => {
+    confirmAiOrganize(unfiledDocumentIds);
+  }, [confirmAiOrganize, unfiledDocumentIds]);
 
   // ── Filter actions ────────────────────────────────────────────────────────
 
@@ -701,19 +725,29 @@ export default function VaultScreen() {
       </View>
 
       {!filters.category && !filters.isFavorite && unfiledCount > 0 && (
-        <Pressable
-          style={styles.unfiledBanner}
-          onPress={() => router.push('/(tabs)/folders')}
-          hitSlop={4}
-          accessibilityRole="button"
-          accessibilityLabel={`${unfiledCount} unfiled documents — tap to file them`}
-        >
-          <Feather name="inbox" size={14} color={C.amber} />
-          <Text style={styles.unfiledBannerText}>
-            {unfiledCount} document{unfiledCount !== 1 ? 's' : ''} still need a folder
-          </Text>
-          <Text style={styles.unfiledBannerAction}>Open</Text>
-        </Pressable>
+        <View style={styles.unfiledBanner}>
+          <Pressable
+            style={styles.unfiledBannerMain}
+            onPress={() => router.push('/(tabs)/folders')}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={`${unfiledCount} unfiled documents — open folders`}
+          >
+            <Feather name="inbox" size={14} color={C.amber} />
+            <Text style={styles.unfiledBannerText}>
+              {unfiledCount} document{unfiledCount !== 1 ? 's' : ''} still need a folder
+            </Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.unfiledBannerButton, pressed && styles.unfiledBannerButtonPressed]}
+            onPress={handleFileAllUnfiled}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`File all ${unfiledCount} unfiled documents`}
+          >
+            <Text style={styles.unfiledBannerAction}>File all</Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -1325,10 +1359,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.amber + '33',
   },
+  unfiledBannerMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[2],
+  },
   unfiledBannerText: {
     flex: 1,
     fontSize: T.sm,
     color: C.amber,
+  },
+  unfiledBannerButton: {
+    paddingHorizontal: S[3],
+    paddingVertical: S[2],
+    borderRadius: R.md,
+    backgroundColor: C.ink3,
+  },
+  unfiledBannerButtonPressed: {
+    opacity: 0.8,
   },
   unfiledBannerAction: {
     fontSize: T.sm,
