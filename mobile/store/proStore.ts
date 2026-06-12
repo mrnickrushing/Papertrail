@@ -10,10 +10,6 @@ import { apiRequest, isBackendConfigured } from '@/services/api';
 
 export const FREE_DOCUMENT_LIMIT = 3;
 
-// If EXPO_PUBLIC_ADMIN_EMAIL is set at build time, this is an admin/dev build
-// and Pro is granted automatically without requiring a purchase.
-const IS_ADMIN_BUILD = Boolean(process.env.EXPO_PUBLIC_ADMIN_EMAIL);
-
 interface ProState {
   isPro: boolean;
   isChecking: boolean;
@@ -25,14 +21,10 @@ interface ProState {
 export const useProStore = create<ProState>()(
   persist(
     (set, get) => ({
-      isPro: IS_ADMIN_BUILD,
+      isPro: false,
       isChecking: false,
       hasAdminAccess: false,
       checkPro: async (email?: string) => {
-        if (IS_ADMIN_BUILD) {
-          set({ isPro: true });
-          return;
-        }
         set({ isChecking: true });
         try {
           const revenueCatPro = await checkProEntitlement();
@@ -59,9 +51,9 @@ export const useProStore = create<ProState>()(
           set({ isChecking: false });
         }
       },
-      setAdminAccess: (enabled) => set((state) => ({
+      setAdminAccess: (enabled) => set(() => ({
         hasAdminAccess: enabled,
-        isPro: enabled || state.isPro,
+        isPro: enabled ? true : false,
       })),
     }),
     {
