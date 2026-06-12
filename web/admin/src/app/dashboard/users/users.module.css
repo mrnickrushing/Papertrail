@@ -28,3 +28,22 @@
   background: var(--ink3); border: 1px solid var(--ink4);
   color: var(--faint); font-size: 11px; font-weight: 600;
 }
+
+.deleteBtn {
+  padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 1px solid var(--ink4); color: var(--faint);
+  cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.deleteBtn:hover { background: rgba(208,75,75,0.12); border-color: var(--danger, #D04B4B); color: var(--danger, #D04B4B); }
+
+.confirmRow { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.confirmLabel { font-size: 12px; color: var(--danger, #D04B4B); font-weight: 600; }
+.confirmYes {
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;
+  background: var(--danger, #D04B4B); border: none; color: #fff; cursor: pointer;
+}
+.confirmYes:disabled { opacity: 0.6; cursor: not-allowed; }
+.confirmNo {
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 1px solid var(--ink4); color: var(--ash); cursor: pointer;
+}

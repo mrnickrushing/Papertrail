@@ -102,3 +102,7 @@ export type UserRecord = {
 export async function getUsers() {
   return apiFetch<{ users: UserRecord[] }>('/v1/admin/users');
 }
+
+export async function deleteUser(id: string) {
+  return apiFetch<{ ok: boolean }>(`/v1/admin/users/${id}`, { method: 'DELETE' });
+}

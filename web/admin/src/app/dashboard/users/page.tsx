@@ -1,4 +1,6 @@
-import { getUsers, type UserRecord } from '@/lib/api';
+import { revalidatePath } from 'next/cache';
+import { getUsers, deleteUser, type UserRecord } from '@/lib/api';
+import { DeleteUserButton } from './DeleteUserButton';
 import styles from './users.module.css';
 
 export const revalidate = 0;
@@ -10,6 +12,12 @@ async function fetchUsers() {
   } catch (e) {
     return { users: [], error: String(e) };
   }
+}
+
+async function handleDelete(id: string) {
+  'use server';
+  await deleteUser(id);
+  revalidatePath('/dashboard/users');
 }
 
 export default async function UsersPage() {
@@ -36,6 +44,7 @@ export default async function UsersPage() {
                 <th>Provider</th>
                 <th>Pro</th>
                 <th>Joined</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -46,6 +55,13 @@ export default async function UsersPage() {
                   <td>{u.provider}</td>
                   <td>{u.isPro ? <span className={styles.proBadge}>Pro</span> : <span className={styles.freeBadge}>Free</span>}</td>
                   <td className={styles.time}>{new Date(u.createdAt).toLocaleString()}</td>
+                  <td>
+                    <DeleteUserButton
+                      userId={u.id}
+                      userName={u.fullName || u.email}
+                      onDelete={handleDelete}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
