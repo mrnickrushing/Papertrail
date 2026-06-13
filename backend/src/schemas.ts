@@ -126,6 +126,7 @@ export const emailInboundSchema = z.object({
     filename: z.string().min(1),
     mimeType: z.string().min(1),
     sizeBytes: z.number().nonnegative(),
+    content: z.string().optional(), // base64-encoded file content
   })).default([]),
 });
 

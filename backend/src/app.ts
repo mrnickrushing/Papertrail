@@ -34,6 +34,7 @@ import {
   headObjectInfo,
   storageUrlToKey,
   parseEmailStorageKey,
+  uploadBuffer,
 } from './r2.js';
 
 function parseBody<T>(schema: { parse: (value: unknown) => T }, body: unknown): T {
@@ -508,6 +509,40 @@ export async function buildApp(config: RuntimeConfig, store: FiletrailStore = ne
   app.post('/v1/email/inbound', async (request) => {
     const input = parseBody(emailInboundSchema, request.body);
     const record = await store.addInboundEmail(input);
+
+    if (r2Client && r2Config) {
+      const now = new Date().toISOString();
+      const documents: Parameters<typeof store.push>[0]['documents'] = [];
+      for (const att of input.attachments) {
+        if (!att.content) continue;
+        const id = randomUUID();
+        const key = `email/${id}/${att.filename}`;
+        const buffer = Buffer.from(att.content, 'base64');
+        await uploadBuffer(r2Client, r2Config.bucket, key, buffer, att.mimeType);
+        const titleBase = att.filename.replace(/\.[^.]+$/, '') || att.filename;
+        documents.push({
+          id,
+          title: titleBase,
+          category: 'other',
+          mimeType: att.mimeType,
+          fileSizeBytes: buffer.length,
+          pageCount: 1,
+          ocrStatus: 'unavailable',
+          source: 'email',
+          emailSource: { sender: input.sender, subject: input.subject, receivedAt: now },
+          isFavorite: false,
+          folderId: null,
+          tags: [],
+          storageUrl: `r2://${r2Config.bucket}/${key}`,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      if (documents.length > 0) {
+        await store.push({ deviceId: 'email-inbound', documents, folders: [], deletedDocumentIds: [], deletedFolderIds: [] });
+      }
+    }
+
     return { ok: true, inboundId: record.id, receivedAt: record.receivedAt };
   });
 
