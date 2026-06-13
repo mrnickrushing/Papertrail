@@ -80,6 +80,24 @@ export async function getDownloadUrl(
 }
 
 /**
+ * Uploads a raw buffer directly to R2 (used for email attachments).
+ */
+export async function uploadBuffer(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  content: Buffer,
+  mimeType: string,
+): Promise<void> {
+  await client.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: content,
+    ContentType: mimeType,
+  }));
+}
+
+/**
  * Deletes an object from R2. Silent on missing key.
  */
 export async function deleteObject(

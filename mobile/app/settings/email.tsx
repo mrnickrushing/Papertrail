@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
 import { useAppStore } from '@/store';
 import { fetchEmailVaultConfig, fetchInboundEmails, type EmailVaultConfig, type EmailVaultInboundRecord } from '@/services/emailVault';
 import { SettingsSubpageShell, SectionHeader, SettingsCard, SettingsRow, Hint } from '@/components/settings/SettingsUi';
@@ -15,30 +15,50 @@ export default function EmailSettingsScreen() {
   const accountEmail = useAppStore((s) => s.accountProfile?.email);
   const [config, setConfig] = React.useState<EmailVaultConfig | null>(null);
   const [emails, setEmails] = React.useState<EmailVaultInboundRecord[]>([]);
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  React.useEffect(() => {
-    let active = true;
-    Promise.all([
-      fetchEmailVaultConfig(accountEmail),
-      fetchInboundEmails(20),
-    ]).then(([nextConfig, nextEmails]) => {
-      if (!active) return;
+  const load = React.useCallback(async () => {
+    try {
+      const [nextConfig, nextEmails] = await Promise.all([
+        fetchEmailVaultConfig(accountEmail),
+        fetchInboundEmails(20),
+      ]);
       setConfig(nextConfig);
       setEmails(nextEmails);
-    }).catch(() => undefined);
-    return () => {
-      active = false;
-    };
+    } catch {
+      // silent
+    }
   }, [accountEmail]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const handleCopy = async () => {
+    if (!config?.forwardingAddress) return;
+    await Share.share({ message: config.forwardingAddress });
+  };
 
   return (
     <SettingsSubpageShell title="Email to Vault">
-      <SectionHeader title="Forwarding" />
+      <SectionHeader title="Forwarding Address" />
       <SettingsCard>
-        <SettingsRow
-          label="Forwarding address"
-          value={config?.forwardingAddress ?? 'Not configured'}
-        />
+        {config?.forwardingAddress ? (
+          <TouchableOpacity onPress={handleCopy} activeOpacity={0.7} style={styles.addressRow}>
+            <Text style={styles.addressText} numberOfLines={1}>{config.forwardingAddress}</Text>
+            <View style={styles.copyBadge}>
+              <Text style={styles.copyLabel}>Copy</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <SettingsRow label="Forwarding address" value="Not configured" />
+        )}
         <SettingsRow
           label="Inbound status"
           value={config?.inboundEnabled ? 'Ready' : 'Backend setup needed'}
@@ -46,16 +66,22 @@ export default function EmailSettingsScreen() {
       </SettingsCard>
       <Hint>
         {config?.inboundEnabled
-          ? 'Forward bills, statements, school forms, insurance emails, and PDFs to this address. Their metadata will show up here once your inbound provider posts them to the backend.'
-          : 'Set INBOUND_EMAIL_DOMAIN on the backend and connect your inbound mail provider to POST into /v1/email/inbound.'}
+          ? 'Forward bills, statements, school forms, insurance emails, and PDFs to this address. Attachments land in your vault automatically.'
+          : 'Set INBOUND_EMAIL_DOMAIN on the backend to generate your forwarding address.'}
       </Hint>
 
-      <SectionHeader title="Recent Activity" />
+      <View style={styles.sectionRow}>
+        <SectionHeader title="Recent Activity" />
+        <TouchableOpacity onPress={handleRefresh} style={styles.refreshBtn} disabled={refreshing}>
+          <Text style={styles.refreshLabel}>{refreshing ? 'Loading…' : 'Refresh'}</Text>
+        </TouchableOpacity>
+      </View>
+
       {emails.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No inbound emails yet</Text>
           <Text style={styles.emptyBody}>
-            Once forwarding is live, incoming attachments will appear here so you can confirm the pipeline is working.
+            Copy your forwarding address above and send a test email with a PDF attachment. It will appear here once received.
           </Text>
         </View>
       ) : (
@@ -86,6 +112,45 @@ export default function EmailSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: S[1],
+  },
+  refreshBtn: {
+    paddingHorizontal: S[3],
+    paddingVertical: S[2],
+  },
+  refreshLabel: {
+    fontSize: T.xs,
+    color: C.amber,
+    fontWeight: '600',
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[3],
+    paddingVertical: S[3],
+    paddingHorizontal: S[4],
+  },
+  addressText: {
+    flex: 1,
+    fontSize: T.sm,
+    color: C.cream,
+    fontWeight: '500',
+  },
+  copyBadge: {
+    backgroundColor: C.amber,
+    borderRadius: R.full,
+    paddingHorizontal: S[3],
+    paddingVertical: S[1],
+  },
+  copyLabel: {
+    fontSize: T.xs,
+    color: C.ink1,
+    fontWeight: '700',
+  },
   emptyCard: {
     backgroundColor: C.ink2,
     borderRadius: R.lg,
